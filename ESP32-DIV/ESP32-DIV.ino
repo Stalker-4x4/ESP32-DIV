@@ -12,10 +12,14 @@
 #include "rfid.h"
 #include "shared.h"
 #include "utils.h"
+#include "hardware_detect.h"
 
 TFT_eSPI tft = TFT_eSPI();
 
 PCF8574 pcf(PCF8574_I2C_ADDR);
+
+// PR #179 hardware-detection status (probes run in setup()).
+HardwareStatus hwStatus;
 
 // BUGFIX: Safe button release wait with timeout
 // Prevents infinite hang if a button gets stuck (e.g., hardware short, debris)
@@ -3322,6 +3326,36 @@ void setup() {
 #else
   Serial.println("PCF8574 buttons disabled for this board");
 #endif
+
+  // --- PR #179 hardware detection: boot-time peripheral probes ---
+  Serial.println("[boot] hardware probe");
+  {
+    extern bool sdCardPresent;
+    // I2C: PCF8574 button expander (auto-detect across 0x20..0x27)
+    for (uint8_t a = 0x20; a <= 0x27; a++) {
+      if (probePCF8574(a)) { hwStatus.pcf8574_present = true; break; }
+    }
+    // SPI: switch to the shield RF wiring, probe nRF24 + CC1101, then hand SPI back to SD.
+    SPI.begin(13, 11, 12, CSN_PIN_1);
+    hwStatus.nrf24_present  = probeNRF24();
+    hwStatus.cc1101_present = probeCC1101();
+    initSDCard();                 // restores SD SPI wiring and remounts the card
+    hwStatus.sd_present = sdCardPresent;
+    // UART: listen briefly for NMEA on the GPS port (module TX -> IO47)
+    {
+      HardwareSerial hwGps(2);
+      hwGps.begin(9600, SERIAL_8N1, GPS_UART_RX, GPS_UART_TX);
+      hwStatus.gps_present = probeGPS(hwGps, 1500);
+      hwGps.end();
+    }
+    // PN532 shares its SS with nRF24; it is checked when the RFID feature opens.
+    hwStatus.pn532_present = false;
+    Serial.printf("[HW] summary: nrf24=%d cc1101=%d gps=%d pcf8574=%d sd=%d\n",
+                  hwStatus.nrf24_present, hwStatus.cc1101_present, hwStatus.gps_present,
+                  hwStatus.pcf8574_present, hwStatus.sd_present);
+    showHardwareStatus(tft, 150);
+    delay(1200);
+  }
 
   Serial.println("[boot] BLE init");
   BLEDevice::init(ESP32DIV_NAME);
