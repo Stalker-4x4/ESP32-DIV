@@ -2613,7 +2613,9 @@ void updateDisplay() {
     const bool fullRedraw = !s_jammerDisp.valid;
     if (fullRedraw || s_jammerDisp.freqMHz100 != freqKey ||
         s_jammerDisp.autoMode != autoMode) {
-      jammerDrawValueCell(40, 22 + kJammerYSHIFT, 96, kJammerValueLineH, freqBuf,
+      // width 85 (not 96): the old cell reached x=136 and its black wipe erased
+      // the 'M' of the "Mode:" label at x=130 (showed "ode:"). 85 ends at x=125.
+      jammerDrawValueCell(40, 22 + kJammerYSHIFT, 85, kJammerValueLineH, freqBuf,
                           autoMode ? UI_WARN : UI_TEXT);
       s_jammerDisp.freqMHz100 = freqKey;
       s_jammerDisp.autoMode = autoMode;
@@ -2844,19 +2846,18 @@ void subjammerLoop() {
       }
     }
     jammerPollBlinkIndicator();
-    subjammerHandleNavButtons();
+    // NOTE: do not use the touch-nav handler here. Its UP/DOWN slots phantom-fire
+    // (same root cause that froze Settings navigation) and phantom-toggled
+    // Jam/Auto, scrambling the frequency behaviour. The physical-button block
+    // below drives everything with the correct, non-phantom mapping.
 
-#if HAS_PCF8574_BUTTONS
-    int btnLeftState = pcf.digitalRead(JAM_BTN_LEFT);
-    int btnRightState = pcf.digitalRead(JAM_BTN_RIGHT);
-    int btnUpState = pcf.digitalRead(JAM_BTN_UP);
-    int btnDownState = pcf.digitalRead(JAM_BTN_DOWN);
-#else
-    int btnLeftState = isPhysicalButtonPressed(BTN_LEFT) ? LOW : HIGH;
+    // Read the physical buttons the same way every other (working) feature does.
+    // The old raw pcf.digitalRead(JAM_BTN_*) path mis-behaved here (scrambled
+    // directions) while isPhysicalButtonPressed(BTN_*) works everywhere else.
+    int btnLeftState  = isPhysicalButtonPressed(BTN_LEFT)  ? LOW : HIGH;
     int btnRightState = isPhysicalButtonPressed(BTN_RIGHT) ? LOW : HIGH;
-    int btnUpState = isPhysicalButtonPressed(BTN_UP) ? LOW : HIGH;
-    int btnDownState = isPhysicalButtonPressed(BTN_DOWN) ? LOW : HIGH;
-#endif
+    int btnUpState    = isPhysicalButtonPressed(BTN_UP)    ? LOW : HIGH;
+    int btnDownState  = isPhysicalButtonPressed(BTN_DOWN)  ? LOW : HIGH;
 
     if (btnUpState == LOW && millis() - lastDebounceTime > debounceDelay) {
         subjammerToggleJam();
