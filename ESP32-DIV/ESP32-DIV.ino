@@ -3353,11 +3353,11 @@ void setup() {
       hwStatus.gps_present = probeGPS(hwGps, 1500);
       hwGps.end();
     }
-    // PN532 shares its SS with nRF24; it is checked when the RFID feature opens.
-    hwStatus.pn532_present = false;
-    Serial.printf("[HW] summary: nrf24=%d cc1101=%d gps=%d pcf8574=%d sd=%d\n",
+    // PN532 over SPI (RfidNfc::begin probes firmware version and restores SD SPI).
+    hwStatus.pn532_present = RfidNfc::begin();
+    Serial.printf("[HW] summary: nrf24=%d cc1101=%d gps=%d pn532=%d pcf8574=%d sd=%d\n",
                   hwStatus.nrf24_present, hwStatus.cc1101_present, hwStatus.gps_present,
-                  hwStatus.pcf8574_present, hwStatus.sd_present);
+                  hwStatus.pn532_present, hwStatus.pcf8574_present, hwStatus.sd_present);
     showHardwareStatus(tft, 150);
     delay(1200);
   }

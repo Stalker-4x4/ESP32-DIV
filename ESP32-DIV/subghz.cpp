@@ -1532,11 +1532,13 @@ void ReplayAttackLoop() {
       subghzRedrawNavChrome();
     }
 
-    if (rightPressed && !prevRight && millis() - lastDebounceTime > debounceDelay) {
+    // Level-triggered (not edge) so holding Freq+/- keeps stepping, matching the
+    // Jammer. Repeats every debounceDelay while the button is held.
+    if (rightPressed && millis() - lastDebounceTime > debounceDelay) {
         replayFreqNext();
         lastDebounceTime = millis();
     }
-    if (leftPressed && !prevLeft && millis() - lastDebounceTime > debounceDelay) {
+    if (leftPressed && millis() - lastDebounceTime > debounceDelay) {
         replayFreqPrev();
         lastDebounceTime = millis();
     }

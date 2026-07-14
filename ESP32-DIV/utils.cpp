@@ -2033,11 +2033,15 @@ void loop(){
 
   uint32_t now = millis();
 
-  bool upNow     = isButtonPressed(BTN_UP);
-  bool downNow   = isButtonPressed(BTN_DOWN);
-  bool leftNow   = isButtonPressed(BTN_LEFT);
-  bool rightNow  = isButtonPressed(BTN_RIGHT);
-  bool selectNow = isButtonPressed(BTN_SELECT);
+  // Use ONLY the physical PCF8574 buttons here. isButtonPressed() also OR-s in
+  // the touch-nav slots, whose UP/DOWN slots phantom-fire in this screen and
+  // made the cursor bounce +1/-1 (stuck on the first row). The other features
+  // already read physical buttons directly; this makes Settings consistent.
+  bool upNow     = isPhysicalButtonPressed(BTN_UP);
+  bool downNow   = isPhysicalButtonPressed(BTN_DOWN);
+  bool leftNow   = isPhysicalButtonPressed(BTN_LEFT);
+  bool rightNow  = isPhysicalButtonPressed(BTN_RIGHT);
+  bool selectNow = isPhysicalButtonPressed(BTN_SELECT);
 
 
   if (selectNow && !selectWasDown && (now - lastActionMs > ACTION_DEBOUNCE_MS)) {
