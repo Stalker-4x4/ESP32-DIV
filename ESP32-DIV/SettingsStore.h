@@ -18,6 +18,11 @@ struct AppSettings {
   bool     autoWifiScan    = true;
   bool     autoBleScan     = true;
 
+  // SubGHz frequency control for Replay Attack & Jammer:
+  //   false = fixed preset list (Freq+/- cycles presets, current behaviour)
+  //   true  = manual fine tuning (Freq+/- steps by 0.01 MHz)
+  bool     subghzManualFreq = false;
+
   uint16_t touchXMin = TOUCH_X_MIN;
   uint16_t touchXMax = TOUCH_X_MAX;
   uint16_t touchYMin = TOUCH_Y_MIN;

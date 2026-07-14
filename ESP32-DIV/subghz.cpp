@@ -5,6 +5,14 @@
 #include "config.h"
 #include "icon.h"
 #include "shared.h"
+#include "SettingsStore.h"
+
+// SubGHz manual fine-tuning (settings().subghzManualFreq): Freq+/- step by 0.01 MHz
+// instead of cycling the fixed preset list. Shared by Replay Attack and Jammer.
+static constexpr double SUBGHZ_MANUAL_MIN_MHZ  = 300.00;
+static constexpr double SUBGHZ_MANUAL_MAX_MHZ  = 928.00;
+static constexpr double SUBGHZ_MANUAL_STEP_MHZ = 0.01;
+static inline bool subghzManualFreqEnabled() { return settings().subghzManualFreq; }
 
 
 namespace {
@@ -538,6 +546,8 @@ static const uint32_t subghz_frequency_list[] = {
 };
 
 uint16_t currentFrequencyIndex = 0;
+static double replayManualMHz = 433.92;   // manual-mode frequency (settings().subghzManualFreq)
+static int    s_replayFreqKey = -1;       // display cache key for the freq cell (fixed or manual)
 int yshift = 20;
 
 static bool autoScanEnabled = false;
@@ -679,6 +689,14 @@ static void replayClearScanLock() {
   rssiDetectStreak = 0;
 }
 
+// Manual fine-tuning: tune the CC1101 straight to replayManualMHz (no preset list).
+static void replayTuneManual() {
+  ELECHOUSE_cc1101.setSidle();
+  ELECHOUSE_cc1101.setMHZ(replayManualMHz);
+  ELECHOUSE_cc1101.SetRx();
+  mySwitch.setReceiveTolerance(replayManualMHz < 350.0 ? 50 : 40);
+}
+
 static bool replayLooksLikeRealDecode(uint32_t value, uint16_t bits, uint16_t proto) {
   if (value == 0) {
     return false;
@@ -763,14 +781,26 @@ static void replaySampleRssiForScan(uint32_t now) {
 static void replayFreqNext() {
   autoScanEnabled = false;
   replayClearScanLock();
-  tuneToIndex((uint16_t)((currentFrequencyIndex + 1) % freqCount()), true);
+  if (subghzManualFreqEnabled()) {
+    replayManualMHz += SUBGHZ_MANUAL_STEP_MHZ;
+    if (replayManualMHz > SUBGHZ_MANUAL_MAX_MHZ) replayManualMHz = SUBGHZ_MANUAL_MAX_MHZ;
+    replayTuneManual();
+  } else {
+    tuneToIndex((uint16_t)((currentFrequencyIndex + 1) % freqCount()), true);
+  }
   updateDisplay();
 }
 
 static void replayFreqPrev() {
   autoScanEnabled = false;
   replayClearScanLock();
-  tuneToIndex((uint16_t)((currentFrequencyIndex + freqCount() - 1) % freqCount()), true);
+  if (subghzManualFreqEnabled()) {
+    replayManualMHz -= SUBGHZ_MANUAL_STEP_MHZ;
+    if (replayManualMHz < SUBGHZ_MANUAL_MIN_MHZ) replayManualMHz = SUBGHZ_MANUAL_MIN_MHZ;
+    replayTuneManual();
+  } else {
+    tuneToIndex((uint16_t)((currentFrequencyIndex + freqCount() - 1) % freqCount()), true);
+  }
   updateDisplay();
 }
 
@@ -913,8 +943,10 @@ void updateDisplay() {
     char ptcBuf[8];
     char valBuf[16];
 
-    snprintf(freqBuf, sizeof(freqBuf), "%.2f MHz",
-             subghz_frequency_list[currentFrequencyIndex] / 1000000.0);
+    const double shownMHz = subghzManualFreqEnabled()
+                              ? replayManualMHz
+                              : subghz_frequency_list[currentFrequencyIndex] / 1000000.0;
+    snprintf(freqBuf, sizeof(freqBuf), "%.2f MHz", shownMHz);
     if (modeState == 2) {
       snprintf(modeBuf, sizeof(modeBuf), "LOCK");
     } else {
@@ -926,8 +958,10 @@ void updateDisplay() {
     snprintf(valBuf, sizeof(valBuf), "%lu", (unsigned long)receivedValue);
 
     const bool fullRedraw = !s_replayDisp.valid;
-    if (fullRedraw || s_replayDisp.freqIndex != currentFrequencyIndex) {
+    const int freqKey = (int)(shownMHz * 100.0 + 0.5);
+    if (fullRedraw || s_replayFreqKey != freqKey) {
       replayDrawValueCell(50, 20 + yshift, 72, kReplayValueLineH, freqBuf, UI_WARN);
+      s_replayFreqKey = freqKey;
       s_replayDisp.freqIndex = currentFrequencyIndex;
     }
     if (fullRedraw || s_replayDisp.modeState != modeState) {
@@ -1340,6 +1374,10 @@ void ReplayAttackSetup() {
 
   tuneToIndex(currentFrequencyIndex, false);
   mySwitch.setReceiveTolerance(replayFreqIsLowBand(currentFrequencyIndex) ? 50 : 40);
+  s_replayFreqKey = -1;                 // force freq cell redraw
+  if (subghzManualFreqEnabled()) {      // start on the manual frequency, not a preset
+    replayTuneManual();
+  }
 
   subghzClearBody(TFT_BLACK);
   tft.setRotation(TFT_ROTATION);
@@ -2364,6 +2402,15 @@ static void subjammerToggleJam() {
 }
 
 static void subjammerFreqNext() {
+  if (subghzManualFreqEnabled()) {
+    targetFrequency += (float)SUBGHZ_MANUAL_STEP_MHZ;
+    if (targetFrequency > (float)SUBGHZ_MANUAL_MAX_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MAX_MHZ;
+    ELECHOUSE_cc1101.setMHZ(targetFrequency);
+    if (jammingRunning) ELECHOUSE_cc1101.SetTx();
+    updateDisplay();
+    lastDebounceTime = millis();
+    return;
+  }
   if (autoMode) {
     return;
   }
@@ -2375,6 +2422,15 @@ static void subjammerFreqNext() {
 }
 
 static void subjammerFreqPrev() {
+  if (subghzManualFreqEnabled()) {
+    targetFrequency -= (float)SUBGHZ_MANUAL_STEP_MHZ;
+    if (targetFrequency < (float)SUBGHZ_MANUAL_MIN_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MIN_MHZ;
+    ELECHOUSE_cc1101.setMHZ(targetFrequency);
+    if (jammingRunning) ELECHOUSE_cc1101.SetTx();
+    updateDisplay();
+    lastDebounceTime = millis();
+    return;
+  }
   if (autoMode) {
     return;
   }

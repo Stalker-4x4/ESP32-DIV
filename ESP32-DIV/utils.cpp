@@ -525,7 +525,10 @@ float readBatteryVoltage() {
   if (ipPct >= 0) {
     // Map % back to a voltage so the existing status-bar map(V*100,300,420,..)
     // reproduces this percentage exactly (3.0 V = 0 %, 4.2 V = 100 %).
-    return 3.0f + (ipPct / 100.0f) * (4.2f - 3.0f);
+    // +0.006 V epsilon: the status bar does map((long)(V*100), 300, 420, ...),
+    // which truncates, so a bare 4.2f (=4.19999 in float) *100 -> 419 -> 99 %.
+    // The epsilon makes every 25 % step round to its exact value (incl. 100 %).
+    return 3.0f + (ipPct / 100.0f) * (4.2f - 3.0f) + 0.006f;
   }
 
   // Fallback: calibrated ADC read on the divider pin (GPIO2 on v2).
@@ -1453,7 +1456,7 @@ static int  sel = 0;
 static bool dirtySettings = false;
 static bool uiDirty = false;
 
-static const char* items[] = {"Brightness", "Theme", "Accent", "NeoPixel", "Auto Scan"};
+static const char* items[] = {"Brightness", "Theme", "Accent", "NeoPixel", "Auto Scan", "SubGHz Freq"};
 static const int N = sizeof(items)/sizeof(items[0]);
 
 static uint8_t  last_brightness;
@@ -1461,6 +1464,7 @@ static Theme    last_theme;
 static uint8_t  last_accent;
 static bool     last_neopixel;
 static bool     last_autoScan;
+static bool     last_subghzFreq;
 static int      last_sel;
 
 static bool dragging = false;
@@ -1698,6 +1702,7 @@ static void drawSwitchRow(bool on, bool selected, int row) {
 
 static void drawNeoPixel(bool on, bool selected) { drawSwitchRow(on, selected, 3); }
 static void drawAutoScan(bool on, bool selected) { drawSwitchRow(on, selected, 4); }
+static void drawSubghzFreq(bool manual, bool selected) { drawSwitchRow(manual, selected, 5); }
 
 static Rect backRect(){
   int h = tft.height();
@@ -1764,6 +1769,7 @@ static void drawAll() {
   drawNeoPixel(s.neopixelEnabled, sel==3);
   bool autoScan = (s.autoWifiScan || s.autoBleScan);
   drawAutoScan(autoScan, sel==4);
+  drawSubghzFreq(s.subghzManualFreq, sel==5);
 
   drawFooter(false, false);
 
@@ -1773,6 +1779,7 @@ static void drawAll() {
   last_accent     = s.accentColor;
   last_neopixel   = s.neopixelEnabled;
   last_autoScan     = autoScan;
+  last_subghzFreq   = s.subghzManualFreq;
   uiDirty = false;
 }
 
@@ -1793,6 +1800,7 @@ static void redrawIfChanged() {
     drawCardStatic(3, sel==3);  drawSwitchWidgetRow(s.neopixelEnabled, sel==3, 3);
     bool autoScan = (s.autoWifiScan || s.autoBleScan);
     drawCardStatic(4, sel==4);  drawSwitchWidgetRow(autoScan, sel==4, 4);
+    drawCardStatic(5, sel==5);  drawSwitchWidgetRow(s.subghzManualFreq, sel==5, 5);
     last_sel = sel;
   } else {
     if (s.brightness != last_brightness) {
@@ -1807,6 +1815,10 @@ static void redrawIfChanged() {
     if (autoScan != last_autoScan) {
       drawSwitchWidgetRow(autoScan, sel==4, 4);
       last_autoScan = autoScan;
+    }
+    if (s.subghzManualFreq != last_subghzFreq) {
+      drawSwitchWidgetRow(s.subghzManualFreq, sel==5, 5);
+      last_subghzFreq = s.subghzManualFreq;
     }
     if (s.theme != last_theme) {
       drawThemeWidget(s.theme, sel==1);
@@ -1866,6 +1878,16 @@ static bool applyAutoScan(bool en){
   if (s.autoWifiScan == en && s.autoBleScan == en) return false;
   s.autoWifiScan = en;
   s.autoBleScan  = en;
+  dirtySettings = true;
+  uiDirty = true;
+  lastChangeMs = millis();
+  return true;
+}
+
+static bool applySubghzFreq(bool manual){
+  auto& s = settings();
+  if (s.subghzManualFreq == manual) return false;
+  s.subghzManualFreq = manual;
   dirtySettings = true;
   uiDirty = true;
   lastChangeMs = millis();
@@ -1964,6 +1986,15 @@ static void handleTouch() {
         lastToggleMs = now;
       }
     }
+  } else if (sel == 5) {
+    Rect tr = rSwitchTrack(5);
+    if (tx >= tr.x && tx <= tr.x+tr.w && ty >= tr.y-10 && ty <= tr.y+tr.h+10) {
+      uint32_t now = millis();
+      if (now - lastToggleMs > 120) {
+        applySubghzFreq(!s.subghzManualFreq);
+        lastToggleMs = now;
+      }
+    }
   }
 }
 
@@ -2019,6 +2050,7 @@ void loop(){
     else if (sel==2)                   { applyAccent((s.accentColor + ACCENT_PRESET_COUNT - 1) % ACCENT_PRESET_COUNT); }
     else if (sel==3)                   { applyNeoPixel(false); }
     else if (sel==4)                   { applyAutoScan(false); }
+    else if (sel==5)                   { applySubghzFreq(false); }
     changedByButtons=true;
     lastActionMs = now;
   }
@@ -2029,6 +2061,7 @@ void loop(){
     else if (sel==2)                   { applyAccent((s.accentColor + 1) % ACCENT_PRESET_COUNT); }
     else if (sel==3)                   { applyNeoPixel(true); }
     else if (sel==4)                   { applyAutoScan(true); }
+    else if (sel==5)                   { applySubghzFreq(true); }
     changedByButtons=true;
     lastActionMs = now;
   }
