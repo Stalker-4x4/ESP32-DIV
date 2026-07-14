@@ -7,6 +7,11 @@
 #include "shared.h"
 #include "utils.h"
 
+// PR #179 ported to NimBLE: apply a random MAC via the NimBLE host stack.
+// (The PR used Bluedroid esp_ble_gap_set_rand_addr(), which is unavailable on
+// this NimBLE build and drags in the whole Bluedroid stack.)
+extern "C" int ble_hs_id_set_rnd(const uint8_t *rnd_addr);
+
 #ifdef TFT_BLACK
 #undef TFT_BLACK
 #endif
@@ -702,13 +707,11 @@ void toggleAdvertising() {
       esp_bd_addr_t dummy_addr = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
       for (int i = 0; i < 6; i++) {
         dummy_addr[i] = random(256);
-        if (i == 0) {
-          dummy_addr[i] |= 0xC0; // FIXED: was 0xF0, 0xC0 = valid BLE random static address
-        }
-    // BUGFIX: Apply random MAC to the BLE stack (was never applied - OPSEC critical)
-    esp_ble_gap_set_rand_addr((uint8_t*)dummy_addr);
-    BLEDevice::setOwnAddrType(BLE_ADDR_TYPE_RANDOM);
       }
+      dummy_addr[5] |= 0xC0; // top 2 bits = 1 => valid BLE random *static* address (NimBLE little-endian: [5]=MSB)
+      // PR #179 OPSEC fix (ported to NimBLE): apply the random MAC to the host stack.
+      ble_hs_id_set_rnd(dummy_addr);
+      BLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
 
       BLEAdvertisementData oAdvertisementData = getAdvertismentData();
       pAdvertising->addServiceUUID(devices_uuid);
@@ -1107,13 +1110,11 @@ void sourappleLoop() {
   esp_bd_addr_t dummy_addr = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   for (int i = 0; i < 6; i++) {
     dummy_addr[i] = random(256);
-    if (i == 0) {
-      dummy_addr[i] |= 0xC0; // FIXED: was 0xF0, 0xC0 = valid BLE random static address
-    }
-    // BUGFIX: Apply random MAC to the BLE stack (was never applied - OPSEC critical)
-    esp_ble_gap_set_rand_addr((uint8_t*)dummy_addr);
-    BLEDevice::setOwnAddrType(BLE_ADDR_TYPE_RANDOM);
   }
+  dummy_addr[5] |= 0xC0; // valid BLE random static address (NimBLE little-endian: [5]=MSB)
+  // PR #179 OPSEC fix (ported to NimBLE): apply the random MAC to the host stack.
+  ble_hs_id_set_rnd(dummy_addr);
+  BLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
   BLEAdvertisementData oAdvertisementData = getOAdvertisementData();
 
   Advertising->addServiceUUID(device_uuid);
