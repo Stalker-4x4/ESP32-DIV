@@ -670,7 +670,10 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate, bool bottomSeparator)
     tft.drawRoundRect(x, y, 22, 10, 2, TFT_WHITE);
     tft.fillRect(x + 22, y + 3, 2, 4, TFT_WHITE);
 
-    int batteryLevelWidth = ::map(batteryPercentage, 0, 100, 0, 20);
+    // Frame outline is at x..x+21 (right border column = x+21). Fill from x+2;
+    // cap width at 18 so at 100% the green ends at x+19, leaving an empty pixel
+    // (x+20) before the frame's right border instead of overlapping it.
+    int batteryLevelWidth = ::map(batteryPercentage, 0, 100, 0, 18);
     uint16_t batteryColor = (batteryPercentage > 20) ? TFT_GREEN : TFT_RED;
     tft.fillRoundRect(x + 2, y + 2, batteryLevelWidth, 6, 1, batteryColor);
 

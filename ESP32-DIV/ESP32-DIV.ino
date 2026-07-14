@@ -539,7 +539,10 @@ static bool isTouchNavSlotDown(int idx) {
 
   int x = 0;
   int y = 0;
-  if (!readTouchXYDismiss(x, y)) {
+  // Use the firm (higher-pressure) read, not the light-tap "dismiss" read:
+  // the low threshold picked up touchscreen noise and phantom-fired the UP/DOWN
+  // nav slots (froze Settings, scrambled the Jammer). A real press is required.
+  if (!readTouchXY(x, y)) {
     return false;
   }
 

@@ -2846,10 +2846,8 @@ void subjammerLoop() {
       }
     }
     jammerPollBlinkIndicator();
-    // NOTE: do not use the touch-nav handler here. Its UP/DOWN slots phantom-fire
-    // (same root cause that froze Settings navigation) and phantom-toggled
-    // Jam/Auto, scrambling the frequency behaviour. The physical-button block
-    // below drives everything with the correct, non-phantom mapping.
+    subjammerHandleNavButtons();   // on-screen nav bar (Freq-/Auto/Toggle/Freq+);
+                                   // phantom fixed via firm touch threshold.
 
     // Read the physical buttons the same way every other (working) feature does.
     // The old raw pcf.digitalRead(JAM_BTN_*) path mis-behaved here (scrambled
@@ -2859,21 +2857,26 @@ void subjammerLoop() {
     int btnUpState    = isPhysicalButtonPressed(BTN_UP)    ? LOW : HIGH;
     int btnDownState  = isPhysicalButtonPressed(BTN_DOWN)  ? LOW : HIGH;
 
-    if (btnUpState == LOW && millis() - lastDebounceTime > debounceDelay) {
+    // UP (Jam) / DOWN (Auto): single press only -> edge-triggered.
+    // LEFT/RIGHT (Freq): repeat while held -> level-triggered.
+    static bool jamPrevUp = false, jamPrevDown = false;
+    const bool upLow   = (btnUpState == LOW);
+    const bool downLow = (btnDownState == LOW);
+
+    if (upLow && !jamPrevUp && millis() - lastDebounceTime > debounceDelay) {
         subjammerToggleJam();
     }
-
     if (btnRightState == LOW && !autoMode && millis() - lastDebounceTime > debounceDelay) {
         subjammerFreqNext();
     }
-
     if (btnLeftState == LOW && !autoMode && millis() - lastDebounceTime > debounceDelay) {
         subjammerFreqPrev();
     }
-
-    if (btnDownState == LOW && millis() - lastDebounceTime > debounceDelay) {
+    if (downLow && !jamPrevDown && millis() - lastDebounceTime > debounceDelay) {
         subjammerToggleAuto();
     }
+    jamPrevUp = upLow;
+    jamPrevDown = downLow;
 
     subjammerAutoSweepIfDue();
 
