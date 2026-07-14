@@ -618,7 +618,12 @@ static void runBleDuckyFeature() {
 #endif
 }
 
-float currentBatteryVoltage = readBatteryVoltage();
+// NOTE: do NOT call readBatteryVoltage() here. This is a global initializer that
+// runs during static construction, before setup() and before the I2C/Wire and
+// system are ready; the IP5306 I2C read would block and trip the RTC watchdog
+// (boot loop). The value is refreshed from setup()/loop() (see readBatteryVoltage
+// calls below), so a neutral initial value is all that is needed here.
+float currentBatteryVoltage = 0.0f;
 unsigned long last_interaction_time = 0;
 
 int last_submenu_index = -1;

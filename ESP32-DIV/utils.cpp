@@ -1,5 +1,6 @@
 #include <SD.h>
 #include <SPI.h>
+#include <Wire.h>
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -472,21 +473,74 @@ void requestStatusBarRedraw() {
 const float R1 = 100000.0;
 const float R2 = 100000.0;
 
-float readBatteryVoltage() {
-  const int sampleCount = 10;
-  long sum = 0;
+// ---------------------------------------------------------------------------
+// IP5306 power-management IC (I2C).  On ESP32-DIV v2 the IP5306 is wired in
+// I2C mode (LED1->SCL, LED2->SDA in the schematic) on the same bus as the
+// PCF8574, address 0x75.  Reading the fuel gauge here is far more reliable than
+// the analog divider on GPIO2 and matches the 4-LED indicator exactly.
+//   REG 0x78 (mask 0xF0): 0x00=100% 0x80=75% 0xC0=50% 0xE0=25% (else empty)
+//   REG 0x70 bit3: charging   REG 0x71 bit3: charge full
+// ---------------------------------------------------------------------------
+static const uint8_t IP5306_ADDR = 0x75;
 
-  for (int i = 0; i < sampleCount; i++) {
-    sum += analogRead(BATTERY_ADC_PIN);
-    delay(5);
+static bool ip5306ReadReg(uint8_t reg, uint8_t& val) {
+  Wire.beginTransmission(IP5306_ADDR);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;   // repeated-start read
+  if (Wire.requestFrom((int)IP5306_ADDR, 1) != 1) return false;
+  val = Wire.read();
+  return true;
+}
+
+// Returns 0..100 (25% steps) from the IP5306, or -1 if the chip does not answer.
+int readIP5306Percent() {
+  static bool wireReady = false;
+  if (!wireReady) { Wire.begin(); wireReady = true; }   // default S3 pins: SDA8/SCL9
+
+  uint8_t r70 = 0, r71 = 0, r78 = 0;
+  const bool ok78 = ip5306ReadReg(0x78, r78);
+  const bool ok70 = ip5306ReadReg(0x70, r70);
+  const bool ok71 = ip5306ReadReg(0x71, r71);
+  if (!ok78) return -1;   // IP5306 absent/not answering -> caller falls back to ADC
+
+  const bool charging = ok70 && (r70 & 0x08);
+  const bool full     = ok71 && (r71 & 0x08);
+
+  int pct;
+  switch (r78 & 0xF0) {
+    case 0x00: pct = 100; break;
+    case 0x80: pct = 75;  break;
+    case 0xC0: pct = 50;  break;
+    case 0xE0: pct = 25;  break;
+    default:   pct = 0;   break;   // 0xF0 -> empty
+  }
+  if (full) pct = 100;
+  (void)charging;
+  return pct;
+}
+
+float readBatteryVoltage() {
+  // Preferred source: IP5306 fuel gauge over I2C.
+  const int ipPct = readIP5306Percent();
+  if (ipPct >= 0) {
+    // Map % back to a voltage so the existing status-bar map(V*100,300,420,..)
+    // reproduces this percentage exactly (3.0 V = 0 %, 4.2 V = 100 %).
+    return 3.0f + (ipPct / 100.0f) * (4.2f - 3.0f);
   }
 
-  float averageADC = sum / (float)sampleCount;
-
-  float pinVoltage = (averageADC / 4095.0) * 2.2;
-
-  float outputVoltage = pinVoltage * 2.0;
-
+  // Fallback: calibrated ADC read on the divider pin (GPIO2 on v2).
+  const int sampleCount = 10;
+  uint32_t sumRaw = 0;
+  uint32_t sumMv  = 0;
+  analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+  for (int i = 0; i < sampleCount; i++) {
+    sumRaw += analogRead(BATTERY_ADC_PIN);
+    sumMv  += analogReadMilliVolts(BATTERY_ADC_PIN);
+    delay(5);
+  }
+  const float averageMv  = sumMv  / (float)sampleCount;
+  const float outputVoltage = (averageMv / 1000.0f) * ((R1 + R2) / R2);
+  (void)sumRaw;
   return outputVoltage;
 }
 
