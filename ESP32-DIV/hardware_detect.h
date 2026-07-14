@@ -73,7 +73,7 @@ inline void showHardwareStatus(TFT_eSPI& tft, int startY = 200) {
     { "NRF24",   hwStatus.nrf24_present },
     { "CC1101",  hwStatus.cc1101_present },
     { "GPS",     hwStatus.gps_present },
-    { "PN532",   hwStatus.pn532_present },
+    { "PCF8574", hwStatus.pcf8574_present },
     { "SD Card", hwStatus.sd_present },
   };
   int y = startY;

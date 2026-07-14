@@ -556,7 +556,10 @@ static bool isTouchNavSlotDown(int idx) {
 bool isPhysicalButtonPressed(int buttonPin) {
 #if HAS_PCF8574_BUTTONS
   if (getPcf8574Address() != 0) {
-    return !pcf.digitalRead(buttonPin);
+    i2cLock();
+    const bool pressed = !pcf.digitalRead(buttonPin);
+    i2cUnlock();
+    return pressed;
   }
 #endif
   return false;
@@ -3296,6 +3299,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println("[boot] start");
 
+  i2cGuardInit();   // create the I2C mutex before any task touches the bus
+
   tft.init();
   tft.setRotation(TFT_ROTATION);
 
@@ -3385,4 +3390,13 @@ void loop() {
   applyThemeToPalette(settings().theme);
   handleButtons();
   updateStatusBar();
+
+  // Refresh the battery reading here, in the main task (the status-bar task no
+  // longer does I2C to avoid racing the PCF8574 button reads). Feature screens
+  // refresh it themselves; this keeps it current on the main menu.
+  static uint32_t lastBattMs = 0;
+  if (millis() - lastBattMs > 2000) {
+    currentBatteryVoltage = readBatteryVoltage();
+    lastBattMs = millis();
+  }
 }

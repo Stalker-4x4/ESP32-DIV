@@ -12,6 +12,15 @@
 
 extern TFT_eSPI tft;
 
+// Shared I2C bus guard. The status-bar task reads the IP5306 fuel gauge over I2C
+// while the main task reads the PCF8574 buttons over the same bus; without this
+// mutex their transactions interleave and corrupt/hang the bus. Call i2cGuardInit()
+// once before the status-bar task starts, then wrap every I2C access in
+// i2cLock()/i2cUnlock().
+void i2cGuardInit();
+void i2cLock();
+void i2cUnlock();
+
 // Obfuscated-string helpers (XOR decode, then print).
 void tftPrintObf(const uint8_t* data, size_t len, uint8_t key = k0());
 void tftPrintlnObf(const uint8_t* data, size_t len, uint8_t key = k0());

@@ -428,6 +428,26 @@ static void subghzWaitNavRelease(int pin) {
   delay(kSubghzNavDebounceMs);
 }
 
+// Hold-to-repeat for Freq +/-: the caller does the first step on the press edge,
+// then this keeps calling stepFn while the button stays held, accelerating the
+// rate the longer it is held. Returns after the button is released (+ debounce).
+static void subghzFreqAutoRepeat(int pin, void (*stepFn)()) {
+  const uint32_t holdStart = millis();
+  uint32_t nextAt = holdStart + 450;   // initial pause before auto-repeat kicks in
+  while (isTouchNavButtonPressed(pin)) {
+    const uint32_t now = millis();
+    if ((uint32_t)(now - holdStart) > 20000) break;   // safety: never spin forever
+    if (now >= nextAt) {
+      stepFn();
+      const uint32_t held = now - holdStart;
+      const uint32_t interval = (held > 3000) ? 25 : (held > 1200 ? 70 : 150);
+      nextAt = now + interval;
+    }
+    delay(5);
+  }
+  delay(kSubghzNavDebounceMs);
+}
+
 static void subghzRedrawNavChrome() {
   if (!featureHasTouchNavBar()) {
     return;
@@ -911,11 +931,11 @@ void replayHandleNavButtons() {
 
   if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
     replayFreqPrev();
-    subghzWaitNavRelease(BTN_LEFT);
+    subghzFreqAutoRepeat(BTN_LEFT, replayFreqPrev);
   }
   if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
     replayFreqNext();
-    subghzWaitNavRelease(BTN_RIGHT);
+    subghzFreqAutoRepeat(BTN_RIGHT, replayFreqNext);
   }
   if (isTouchNavButtonPressedEdge(BTN_UP)) {
     if (receivedValue != 0) {
@@ -2489,11 +2509,11 @@ void subjammerHandleNavButtons() {
   }
   if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
     subjammerFreqPrev();
-    subghzWaitNavRelease(BTN_LEFT);
+    subghzFreqAutoRepeat(BTN_LEFT, subjammerFreqPrev);
   }
   if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
     subjammerFreqNext();
-    subghzWaitNavRelease(BTN_RIGHT);
+    subghzFreqAutoRepeat(BTN_RIGHT, subjammerFreqNext);
   }
   if (isTouchNavButtonPressedEdge(BTN_DOWN)) {
     subjammerToggleAuto();

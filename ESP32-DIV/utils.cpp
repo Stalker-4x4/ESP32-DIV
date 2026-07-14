@@ -481,6 +481,13 @@ const float R2 = 100000.0;
 //   REG 0x78 (mask 0xF0): 0x00=100% 0x80=75% 0xC0=50% 0xE0=25% (else empty)
 //   REG 0x70 bit3: charging   REG 0x71 bit3: charge full
 // ---------------------------------------------------------------------------
+// Shared I2C bus guard (IP5306 fuel gauge vs PCF8574 buttons on the same bus,
+// accessed from different FreeRTOS tasks). See utils.h.
+static SemaphoreHandle_t s_i2cMutex = nullptr;
+void i2cGuardInit() { if (!s_i2cMutex) s_i2cMutex = xSemaphoreCreateMutex(); }
+void i2cLock()   { if (s_i2cMutex) xSemaphoreTake(s_i2cMutex, portMAX_DELAY); }
+void i2cUnlock() { if (s_i2cMutex) xSemaphoreGive(s_i2cMutex); }
+
 static const uint8_t IP5306_ADDR = 0x75;
 
 static bool ip5306ReadReg(uint8_t reg, uint8_t& val) {
@@ -498,9 +505,11 @@ int readIP5306Percent() {
   if (!wireReady) { Wire.begin(); wireReady = true; }   // default S3 pins: SDA8/SCL9
 
   uint8_t r70 = 0, r71 = 0, r78 = 0;
+  i2cLock();
   const bool ok78 = ip5306ReadReg(0x78, r78);
   const bool ok70 = ip5306ReadReg(0x70, r70);
   const bool ok71 = ip5306ReadReg(0x71, r71);
+  i2cUnlock();
   if (!ok78) return -1;   // IP5306 absent/not answering -> caller falls back to ADC
 
   const bool charging = ok70 && (r70 & 0x08);
@@ -757,8 +766,10 @@ static void statusBarTask(void* ) {
 
   for (;;) {
     updateSdCardStatus();
-    const float v = readBatteryVoltage();
-    currentBatteryVoltage = v;
+    // NOTE: do NOT read the IP5306 (I2C) here. This runs in a background task and
+    // would race the main task's PCF8574 button reads on the shared I2C bus,
+    // corrupting/hanging it. Use the value the main task cached instead.
+    const float v = currentBatteryVoltage;
 
     const int pct = constrain(::map((int)(v * 100.f), 300, 420, 0, 100), 0, 100);
     const int wifi  = WifiScan::getLastCount();
@@ -2027,6 +2038,7 @@ void loop(){
   bool leftNow   = isButtonPressed(BTN_LEFT);
   bool rightNow  = isButtonPressed(BTN_RIGHT);
   bool selectNow = isButtonPressed(BTN_SELECT);
+
 
   if (selectNow && !selectWasDown && (now - lastActionMs > ACTION_DEBOUNCE_MS)) {
     feature_exit_requested = true;
