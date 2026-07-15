@@ -76,16 +76,16 @@ static void bleSetScannerNavLabels() {
 static constexpr unsigned long kBleNavDebounceMs = 200;
 
 static void bleWaitButtonRelease(int pin) {
-  while (isButtonPressed(pin)) {
+  while (isButtonHeld(pin)) {
     delay(10);
   }
   delay(kBleNavDebounceMs);
 }
 
 static void bleWaitNavRelease(int pin1, int pin2 = -1, int pin3 = -1) {
-  while (isButtonPressed(pin1) ||
-         (pin2 >= 0 && isButtonPressed(pin2)) ||
-         (pin3 >= 0 && isButtonPressed(pin3))) {
+  while (isButtonHeld(pin1) ||
+         (pin2 >= 0 && isButtonHeld(pin2)) ||
+         (pin3 >= 0 && isButtonHeld(pin3))) {
     delay(10);
   }
   delay(kBleNavDebounceMs);

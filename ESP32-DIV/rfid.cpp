@@ -67,9 +67,9 @@ static void rfidPn532VerStr(uint32_t ver) {
 static void rfidReleaseNavButtons() {
   delay(12);
   for (int i = 0; i < 80; i++) {
-    if (!isButtonPressed(BTN_SELECT) && !isButtonPressed(BTN_LEFT) &&
-        !isButtonPressed(BTN_RIGHT) && !isButtonPressed(BTN_UP) &&
-        !isButtonPressed(BTN_DOWN)) {
+    if (!isButtonHeld(BTN_SELECT) && !isButtonHeld(BTN_LEFT) &&
+        !isButtonHeld(BTN_RIGHT) && !isButtonHeld(BTN_UP) &&
+        !isButtonHeld(BTN_DOWN)) {
       break;
     }
     delay(5);

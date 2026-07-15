@@ -27,7 +27,7 @@ HardwareStatus hwStatus;
 
 void waitForButtonRelease(uint8_t btn) {
   unsigned long start = millis();
-  while (isButtonPressed(btn)) {
+  while (isButtonHeld(btn)) {
     if (millis() - start > BUTTON_RELEASE_TIMEOUT_MS) {
       Serial.printf("[WARN] Button %d stuck - forcing release after %dms\n", btn, BUTTON_RELEASE_TIMEOUT_MS);
       break;
@@ -38,7 +38,7 @@ void waitForButtonRelease(uint8_t btn) {
 
 void waitForButtonRelease2(uint8_t btn1, uint8_t btn2) {
   unsigned long start = millis();
-  while (isButtonPressed(btn1) || isButtonPressed(btn2)) {
+  while (isButtonHeld(btn1) || isButtonHeld(btn2)) {
     if (millis() - start > BUTTON_RELEASE_TIMEOUT_MS) {
       Serial.printf("[WARN] Buttons stuck - forcing release after %dms\n", BUTTON_RELEASE_TIMEOUT_MS);
       break;
@@ -576,11 +576,26 @@ bool isTouchNavButtonPressed(int buttonPin) {
   return isTouchNavSlotDown(idx);
 }
 
-bool isButtonPressed(int buttonPin) {
+// Raw held state (level). Use this for release-wait loops and anywhere the
+// current up/down state is needed continuously.
+bool isButtonHeld(int buttonPin) {
   if (isPhysicalButtonPressed(buttonPin)) {
     return true;
   }
   return isTouchNavButtonPressed(buttonPin);
+}
+
+// Rising-edge: returns true only once per press. The caller must release and
+// press again to trigger again. This gives single-press behaviour everywhere
+// that navigates via isButtonPressed(). Hold-to-repeat (Replay/Jammer Freq+/-)
+// is implemented separately with level reads (isPhysicalButtonPressed).
+bool isButtonPressed(int buttonPin) {
+  static bool s_wasHeld[16] = { false };
+  const int idx = buttonPin & 0x0F;
+  const bool cur = isButtonHeld(buttonPin);
+  const bool edge = cur && !s_wasHeld[idx];
+  s_wasHeld[idx] = cur;
+  return edge;
 }
 
 bool isTouchNavButtonPressedEdge(int buttonPin) {
@@ -2452,7 +2467,7 @@ void handleToolsSubmenuButtons() {
 static void otherDismissPlaceholder() {
     delay(25);
     waitForButtonRelease2(BTN_SELECT, BTN_LEFT);
-    while (!isButtonPressed(BTN_SELECT) && !isButtonPressed(BTN_LEFT)) {
+    while (!isButtonHeld(BTN_SELECT) && !isButtonHeld(BTN_LEFT)) {
         int x = 0, y = 0;
         if (!readTouchXYDismiss(x, y) && !readTouchXY(x, y)) {
             delay(12);
@@ -2480,9 +2495,9 @@ static void otherDismissPlaceholder() {
 static void otherRfidReturnGuard() {
     delay(120);
     for (int i = 0; i < 120; i++) {
-        if (!isButtonPressed(BTN_SELECT) && !isButtonPressed(BTN_LEFT) &&
-            !isButtonPressed(BTN_RIGHT) && !isButtonPressed(BTN_UP) &&
-            !isButtonPressed(BTN_DOWN) && !isTouchDownDismiss()) {
+        if (!isButtonHeld(BTN_SELECT) && !isButtonHeld(BTN_LEFT) &&
+            !isButtonHeld(BTN_RIGHT) && !isButtonHeld(BTN_UP) &&
+            !isButtonHeld(BTN_DOWN) && !isTouchDownDismiss()) {
             break;
         }
         delay(5);

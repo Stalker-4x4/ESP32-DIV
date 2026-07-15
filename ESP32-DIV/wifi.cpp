@@ -1453,7 +1453,7 @@ void beaconSpamLoop() {
       output();
     }
 
-    if (!isButtonPressed(BTN_UP)) {
+    if (!isButtonHeld(BTN_UP)) {
       delay(50);
       break;
     }
@@ -1560,7 +1560,7 @@ void displayPrint(String text, uint16_t color, bool extraSpace = false) {
 }
 
 void checkButtonPress() {
-  if (!isButtonPressed(BTN_UP)) {
+  if (!isButtonHeld(BTN_UP)) {
     return;
   }
   delay(200);
@@ -3363,14 +3363,14 @@ static void cpCloneEndUi() {
 }
 
 static void cpCloneWaitNavRelease() {
-  while (isButtonPressed(BTN_UP) || isButtonPressed(BTN_DOWN) || isButtonPressed(BTN_RIGHT)) {
+  while (isButtonHeld(BTN_UP) || isButtonHeld(BTN_DOWN) || isButtonHeld(BTN_RIGHT)) {
     delay(10);
   }
   delay(cportalDebounceMs);
 }
 
 static void cportalWaitButtonRelease(int pin) {
-  while (isButtonPressed(pin)) {
+  while (isButtonHeld(pin)) {
     delay(10);
   }
   delay(cportalDebounceMs);

@@ -42,7 +42,8 @@ void requestStatusBarRedraw();
 extern bool feature_exit_requested;
 
 extern void setBrightness(uint8_t value);
-bool isButtonPressed(int buttonPin);
+bool isButtonPressed(int buttonPin);   // rising edge: one true per press (single-press)
+bool isButtonHeld(int buttonPin);      // level: current held state (for release-wait loops)
 /** True while the PCF8574 button for this pin is held (no touch nav). */
 bool isPhysicalButtonPressed(int buttonPin);
 /** True while a touch nav slot for this pin is held (ignores physical buttons). */

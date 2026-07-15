@@ -1283,7 +1283,7 @@ bool shouldExit() {
 void drainButtons() {
   delay(180);
   for (int i = 0; i < 80; i++) {
-    if (!isButtonPressed(BTN_SELECT)) {
+    if (!isButtonHeld(BTN_SELECT)) {
       break;
     }
     delay(10);
