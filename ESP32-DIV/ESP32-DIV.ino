@@ -590,12 +590,28 @@ bool isButtonHeld(int buttonPin) {
 // that navigates via isButtonPressed(). Hold-to-repeat (Replay/Jammer Freq+/-)
 // is implemented separately with level reads (isPhysicalButtonPressed).
 bool isButtonPressed(int buttonPin) {
-  static bool s_wasHeld[16] = { false };
+  // Rising edge with a debounce that tolerates a noisy/bouncy held button:
+  // this hardware's buttons oscillate 0<->1 (~30 ms) while held, so a plain
+  // edge re-fired on every bounce (repeat). Re-arm only after the button has
+  // been RELEASED continuously for >= REARM_MS; a bouncing hold never stays
+  // released that long, so one press == one action. A real release re-arms.
+  static const uint32_t REARM_MS = 70;
+  static bool     s_armed[16]    = { false };
+  static uint32_t s_relSince[16] = { 0 };
   const int idx = buttonPin & 0x0F;
   const bool cur = isButtonHeld(buttonPin);
-  const bool edge = cur && !s_wasHeld[idx];
-  s_wasHeld[idx] = cur;
-  return edge;
+  const uint32_t now = millis();
+  if (cur) {
+    s_relSince[idx] = 0;
+    if (s_armed[idx]) { s_armed[idx] = false; return true; }
+    return false;
+  }
+  if (s_relSince[idx] == 0) {
+    s_relSince[idx] = now ? now : 1;
+  } else if ((uint32_t)(now - s_relSince[idx]) >= REARM_MS) {
+    s_armed[idx] = true;
+  }
+  return false;
 }
 
 bool isTouchNavButtonPressedEdge(int buttonPin) {
@@ -3417,4 +3433,5 @@ void loop() {
     currentBatteryVoltage = readBatteryVoltage();
     lastBattMs = millis();
   }
+
 }

@@ -1459,16 +1459,11 @@ void ReplayAttackLoop() {
         replayDrawStatusSeparator();
       }
     }
-    replayHandleNavButtons();
+    // (Freq/Send/Save handled below via isButtonPressed/isButtonHeld, which
+    // already cover both physical buttons and the on-screen nav bar.)
 
     static unsigned long lastDebounceTime = 0;
     const unsigned long debounceDelay = 200;
-
-    static bool prevLeft = false, prevRight = false, prevUp = false, prevDown = false;
-    const bool leftPressed  = isPhysicalButtonPressed(BTN_LEFT);
-    const bool rightPressed = isPhysicalButtonPressed(BTN_RIGHT);
-    const bool upPressed    = isPhysicalButtonPressed(BTN_UP);
-    const bool downPressed  = isPhysicalButtonPressed(BTN_DOWN);
 
     replayBeepPoll();
 
@@ -1532,31 +1527,25 @@ void ReplayAttackLoop() {
       subghzRedrawNavChrome();
     }
 
-    // Level-triggered (not edge) so holding Freq+/- keeps stepping, matching the
-    // Jammer. Repeats every debounceDelay while the button is held.
-    if (rightPressed && millis() - lastDebounceTime > debounceDelay) {
+    // Freq (Left/Right): hold-repeat -> level read (isButtonHeld) gated by
+    // debounceDelay, covering physical buttons and the on-screen Freq-/Freq+.
+    // Send (Up) / Save (Down): single press -> debounced edge (isButtonPressed).
+    if (isButtonHeld(BTN_RIGHT) && millis() - lastDebounceTime > debounceDelay) {
         replayFreqNext();
         lastDebounceTime = millis();
     }
-    if (leftPressed && millis() - lastDebounceTime > debounceDelay) {
+    if (isButtonHeld(BTN_LEFT) && millis() - lastDebounceTime > debounceDelay) {
         replayFreqPrev();
         lastDebounceTime = millis();
     }
-    if (upPressed && !prevUp && receivedValue != 0 && millis() - lastDebounceTime > debounceDelay) {
+    if (isButtonPressed(BTN_UP) && receivedValue != 0) {
         autoScanEnabled = false;
         replayClearScanLock();
         sendSignal();
-        lastDebounceTime = millis();
     }
-    if (downPressed && !prevDown && millis() - lastDebounceTime > debounceDelay) {
+    if (isButtonPressed(BTN_DOWN)) {
         replayTrySave();
-        lastDebounceTime = millis();
     }
-
-    prevLeft = leftPressed;
-    prevRight = rightPressed;
-    prevUp = upPressed;
-    prevDown = downPressed;
 
     if (autoScanEnabled) {
       const uint32_t now = millis();
@@ -2846,37 +2835,25 @@ void subjammerLoop() {
       }
     }
     jammerPollBlinkIndicator();
-    subjammerHandleNavButtons();   // on-screen nav bar (Freq-/Auto/Toggle/Freq+);
-                                   // phantom fixed via firm touch threshold.
 
-    // Read the physical buttons the same way every other (working) feature does.
-    // The old raw pcf.digitalRead(JAM_BTN_*) path mis-behaved here (scrambled
-    // directions) while isPhysicalButtonPressed(BTN_*) works everywhere else.
-    int btnLeftState  = isPhysicalButtonPressed(BTN_LEFT)  ? LOW : HIGH;
-    int btnRightState = isPhysicalButtonPressed(BTN_RIGHT) ? LOW : HIGH;
-    int btnUpState    = isPhysicalButtonPressed(BTN_UP)    ? LOW : HIGH;
-    int btnDownState  = isPhysicalButtonPressed(BTN_DOWN)  ? LOW : HIGH;
-
-    // UP (Jam) / DOWN (Auto): single press only -> edge-triggered.
-    // LEFT/RIGHT (Freq): repeat while held -> level-triggered.
-    static bool jamPrevUp = false, jamPrevDown = false;
-    const bool upLow   = (btnUpState == LOW);
-    const bool downLow = (btnDownState == LOW);
-
-    if (upLow && !jamPrevUp && millis() - lastDebounceTime > debounceDelay) {
+    // One unified input path (covers physical buttons and the on-screen nav bar,
+    // both surfaced through isButtonPressed/isButtonHeld):
+    //  - UP (Jam) / DOWN (Auto): single press -> debounced edge (isButtonPressed).
+    //  - LEFT/RIGHT (Freq): repeat while held -> level read (isButtonHeld) gated
+    //    by debounceDelay. The debounced edge/level tolerate this hardware's
+    //    bouncy buttons, so a held button no longer machine-guns Up/Down.
+    if (isButtonPressed(BTN_UP)) {
         subjammerToggleJam();
     }
-    if (btnRightState == LOW && !autoMode && millis() - lastDebounceTime > debounceDelay) {
-        subjammerFreqNext();
-    }
-    if (btnLeftState == LOW && !autoMode && millis() - lastDebounceTime > debounceDelay) {
-        subjammerFreqPrev();
-    }
-    if (downLow && !jamPrevDown && millis() - lastDebounceTime > debounceDelay) {
+    if (isButtonPressed(BTN_DOWN)) {
         subjammerToggleAuto();
     }
-    jamPrevUp = upLow;
-    jamPrevDown = downLow;
+    if (!autoMode && isButtonHeld(BTN_RIGHT) && millis() - lastDebounceTime > debounceDelay) {
+        subjammerFreqNext();
+    }
+    if (!autoMode && isButtonHeld(BTN_LEFT) && millis() - lastDebounceTime > debounceDelay) {
+        subjammerFreqPrev();
+    }
 
     subjammerAutoSweepIfDue();
 
