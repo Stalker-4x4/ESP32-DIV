@@ -14,6 +14,40 @@ static constexpr double SUBGHZ_MANUAL_MAX_MHZ  = 928.00;
 static constexpr double SUBGHZ_MANUAL_STEP_MHZ = 0.01;
 static inline bool subghzManualFreqEnabled() { return settings().subghzManualFreq; }
 
+// Non-blocking accelerating repeat for a held Freq +/- button in manual mode.
+// Returns the frequency step (MHz) to apply THIS frame, or 0 for no step.
+// The longer the button is held the shorter the interval and the larger the
+// step, so a tap nudges 0.01 MHz (precise) while a long hold sweeps quickly.
+// A brief release (<70 ms, i.e. contact bounce on this board) does NOT reset
+// the acceleration, so held tuning stays smooth. Each button keeps its own
+// (holdStart, lastStep, relSince) state passed by reference.
+static double subghzFreqAccelStep(bool held, uint32_t& holdStart,
+                                  uint32_t& lastStep, uint32_t& relSince) {
+  const uint32_t now = millis();
+  if (held) {
+    relSince = 0;
+  } else {
+    if (relSince == 0) relSince = now ? now : 1;
+    if ((uint32_t)(now - relSince) >= 70) { holdStart = 0; return 0.0; }  // real release
+    // shorter gap = contact bounce; keep treating it as held
+  }
+  if (holdStart == 0) {                       // fresh press -> one precise step
+    holdStart = now ? now : 1;
+    lastStep  = now;
+    return SUBGHZ_MANUAL_STEP_MHZ;
+  }
+  const uint32_t heldMs = (uint32_t)(now - holdStart);
+  uint32_t interval;
+  double   stepMHz;
+  if      (heldMs <  500) { interval = 180; stepMHz = 0.01; }   // fine
+  else if (heldMs < 1200) { interval = 70;  stepMHz = 0.01; }
+  else if (heldMs < 2500) { interval = 40;  stepMHz = 0.05; }
+  else if (heldMs < 4500) { interval = 20;  stepMHz = 0.10; }
+  else                    { interval = 12;  stepMHz = 0.25; }   // fast sweep
+  if ((uint32_t)(now - lastStep) >= interval) { lastStep = now; return stepMHz; }
+  return 0.0;
+}
+
 
 namespace {
   static constexpr const char* SUBGHZ_DIR = "/subghz";
@@ -798,6 +832,17 @@ static void replaySampleRssiForScan(uint32_t now) {
   lastRssiSampleMs = now;
 }
 
+// Manual fine-tune by an arbitrary delta (MHz), used by the accelerating hold.
+static void replayFreqAdjust(double deltaMHz) {
+  autoScanEnabled = false;
+  replayClearScanLock();
+  replayManualMHz += deltaMHz;
+  if (replayManualMHz > SUBGHZ_MANUAL_MAX_MHZ) replayManualMHz = SUBGHZ_MANUAL_MAX_MHZ;
+  if (replayManualMHz < SUBGHZ_MANUAL_MIN_MHZ) replayManualMHz = SUBGHZ_MANUAL_MIN_MHZ;
+  replayTuneManual();
+  updateDisplay();
+}
+
 static void replayFreqNext() {
   autoScanEnabled = false;
   replayClearScanLock();
@@ -1530,13 +1575,23 @@ void ReplayAttackLoop() {
     // Freq (Left/Right): hold-repeat -> level read (isButtonHeld) gated by
     // debounceDelay, covering physical buttons and the on-screen Freq-/Freq+.
     // Send (Up) / Save (Down): single press -> debounced edge (isButtonPressed).
-    if (isButtonHeld(BTN_RIGHT) && millis() - lastDebounceTime > debounceDelay) {
-        replayFreqNext();
-        lastDebounceTime = millis();
-    }
-    if (isButtonHeld(BTN_LEFT) && millis() - lastDebounceTime > debounceDelay) {
-        replayFreqPrev();
-        lastDebounceTime = millis();
+    if (subghzManualFreqEnabled()) {
+        // Manual: accelerating fine tune (tap = 0.01 MHz, hold = faster/bigger).
+        static uint32_t rHold=0, rStep=0, rRel=0, lHold=0, lStep=0, lRel=0;
+        double sr = subghzFreqAccelStep(isButtonHeld(BTN_RIGHT), rHold, rStep, rRel);
+        if (sr > 0.0) replayFreqAdjust(+sr);
+        double sl = subghzFreqAccelStep(isButtonHeld(BTN_LEFT), lHold, lStep, lRel);
+        if (sl > 0.0) replayFreqAdjust(-sl);
+    } else {
+        // Fixed presets: cycle one per debounceDelay while held.
+        if (isButtonHeld(BTN_RIGHT) && millis() - lastDebounceTime > debounceDelay) {
+            replayFreqNext();
+            lastDebounceTime = millis();
+        }
+        if (isButtonHeld(BTN_LEFT) && millis() - lastDebounceTime > debounceDelay) {
+            replayFreqPrev();
+            lastDebounceTime = millis();
+        }
     }
     if (isButtonPressed(BTN_UP) && receivedValue != 0) {
         autoScanEnabled = false;
@@ -2412,6 +2467,16 @@ static void subjammerToggleJam() {
   lastDebounceTime = millis();
 }
 
+// Manual fine-tune by an arbitrary delta (MHz), used by the accelerating hold.
+static void subjammerFreqAdjust(double deltaMHz) {
+  targetFrequency += (float)deltaMHz;
+  if (targetFrequency > (float)SUBGHZ_MANUAL_MAX_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MAX_MHZ;
+  if (targetFrequency < (float)SUBGHZ_MANUAL_MIN_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MIN_MHZ;
+  ELECHOUSE_cc1101.setMHZ(targetFrequency);
+  if (jammingRunning) ELECHOUSE_cc1101.SetTx();
+  updateDisplay();
+}
+
 static void subjammerFreqNext() {
   if (subghzManualFreqEnabled()) {
     targetFrequency += (float)SUBGHZ_MANUAL_STEP_MHZ;
@@ -2848,11 +2913,22 @@ void subjammerLoop() {
     if (isButtonPressed(BTN_DOWN)) {
         subjammerToggleAuto();
     }
-    if (!autoMode && isButtonHeld(BTN_RIGHT) && millis() - lastDebounceTime > debounceDelay) {
-        subjammerFreqNext();
-    }
-    if (!autoMode && isButtonHeld(BTN_LEFT) && millis() - lastDebounceTime > debounceDelay) {
-        subjammerFreqPrev();
+    if (!autoMode) {
+        if (subghzManualFreqEnabled()) {
+            // Manual: accelerating fine tune (tap = 0.01 MHz, hold = faster/bigger).
+            static uint32_t rHold=0, rStep=0, rRel=0, lHold=0, lStep=0, lRel=0;
+            double sr = subghzFreqAccelStep(isButtonHeld(BTN_RIGHT), rHold, rStep, rRel);
+            if (sr > 0.0) subjammerFreqAdjust(+sr);
+            double sl = subghzFreqAccelStep(isButtonHeld(BTN_LEFT), lHold, lStep, lRel);
+            if (sl > 0.0) subjammerFreqAdjust(-sl);
+        } else {
+            if (isButtonHeld(BTN_RIGHT) && millis() - lastDebounceTime > debounceDelay) {
+                subjammerFreqNext();
+            }
+            if (isButtonHeld(BTN_LEFT) && millis() - lastDebounceTime > debounceDelay) {
+                subjammerFreqPrev();
+            }
+        }
     }
 
     subjammerAutoSweepIfDue();
