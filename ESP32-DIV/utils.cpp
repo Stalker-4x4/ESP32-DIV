@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "icon.h"
 #include "gps.h"
+#include "neopixel.h"
 #include "shared.h"
 #include "utils.h"
 
@@ -1881,6 +1882,7 @@ static bool applyNeoPixel(bool en){
   auto& s = settings();
   if (s.neopixelEnabled == en) return false;
   s.neopixelEnabled = en;
+  neoPixelSetEnabled(en);
   dirtySettings = true;
   uiDirty = true;
   lastChangeMs = millis();

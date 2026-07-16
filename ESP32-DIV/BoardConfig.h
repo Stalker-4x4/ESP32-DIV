@@ -13,6 +13,9 @@
 // BATTERY_ADC_PIN -1 and analogRead(-1) returns 0, so the gauge shows 0%.
 #define BATTERY_ADC_PIN 2
 
+// Data-in pin for the 4-LED WS2812/NeoPixel status chain (nRF24 x3 + CC1101/RFID).
+#define NEOPIXEL_PIN 1
+
 // Set to 0 to hide the on-screen touch nav bar (5 footer buttons).
 // Touch button input will still work when this is disabled.
 #define TOUCH_BUTTON_CUE_ENABLED 1

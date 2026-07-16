@@ -9,6 +9,7 @@
 #include "icon.h"
 #include "ir.h"
 #include "gps.h"
+#include "neopixel.h"
 #include "rfid.h"
 #include "shared.h"
 #include "utils.h"
@@ -3357,6 +3358,9 @@ void setup() {
   settingsLoad();
   applyThemeToPalette(settings().theme);
   setBrightness(settings().brightness);
+
+  neoPixelInit();
+  neoPixelSetEnabled(settings().neopixelEnabled);
 
 #if HAS_PCF8574_BUTTONS
   if (!initPcf8574Buttons()) {

@@ -4,7 +4,7 @@
 Сборка: Arduino-CLI, core `esp32 @ 2.0.10`, раздел `Minimal SPIFFS (min_spiffs)`,
 Flash 16 МБ. Дисплей — bundled `TFT_eSPI` + `User_Setup v2.h`.
 
-Версия прошивки на экране увеличивается при каждой перепрошивке: `v1.7.0-1` … текущая **`v1.7.0-7`**
+Версия прошивки на экране увеличивается при каждой перепрошивке: `v1.7.0-1` … текущая **`v1.7.0-8`**
 (`ESP32DIV_VERSION` в `shared.h`).
 
 ---
@@ -91,6 +91,43 @@ Flash 16 МБ. Дисплей — bundled `TFT_eSPI` + `User_Setup v2.h`.
 
 Файлы: `ESP32-DIV.ino`, `hardware_detect.h`.
 
+## 9. NeoPixel — индикация работы радиомодулей и RFID (v1.7.0-8)
+
+Цепочка из **4 адресуемых светодиодов WS2812** на выводе **IO1** (`NEOPIXEL_PIN` в `BoardConfig.h`;
+на плате v2 IO1 свободен — значение `1` в `shared.h` относится только к V1). Новый модуль
+`neopixel.h`/`neopixel.cpp` на библиотеке Adafruit NeoPixel.
+
+Раскладка пикселей и цвета:
+
+| Пиксель | Источник | Событие | Цвет |
+|---------|----------|---------|------|
+| 0 / 1 / 2 | nRF24 #1 / #2 / #3 | приём | зелёный (0,255,0) |
+| 0 / 1 / 2 | nRF24 #1 / #2 / #3 | передача | красный (255,0,0) |
+| 3 | CC1101 | приём | зелёный |
+| 3 | CC1101 | передача | красный |
+| 3 | PN532 RFID/NFC | чтение метки | синий (0,0,255) |
+| 3 | PN532 RFID/NFC | запись блока | оранжевый (255,140,0) |
+
+Пиксель 3 делится между CC1101 и RFID — они никогда не активны одновременно.
+
+Как заведено в код (без дублирования «сырых» вызовов):
+- **CC1101**: все переходы состояния идут через обёртки `cc1101GoRx()/cc1101GoTx()/cc1101GoIdle()`
+  в `subghz.cpp`, которые вызывают `ELECHOUSE_cc1101.SetRx/SetTx/setSidle` и красят пиксель 3.
+- **nRF24**: в джаммере/анализаторе все три модуля зажигаются красным при старте несущей
+  (`configureRadio` сразу поднимает carrier), гаснут на выходе; 2.4 ГГц сканер зажигает пиксель 0
+  зелёным через RAII-гвард `NrfScannerLedGuard` на время приёма.
+- **RFID**: RAII-гварды `RfidReadLedGuard` (синий) на цикле прослушки метки и `RfidWriteLedGuard`
+  (оранжевый) на операциях записи блоков — гаснут на любом пути выхода.
+
+Общий тумблер **Settings → NeoPixel** (`AppSettings.neopixelEnabled`) гасит/зажигает всю цепочку;
+драйвер хранит «логический» цвет каждого пикселя, поэтому после повторного включения состояние
+восстанавливается. Яркость ограничена `NEOPIXEL_BRIGHT_MAX` (64) в `shared.h`.
+
+Файлы: `neopixel.h` (new), `neopixel.cpp` (new), `BoardConfig.h` (`NEOPIXEL_PIN`),
+`subghz.cpp` (обёртки CC1101), `bluetooth.cpp` (nRF24 RX/TX), `rfid.cpp` (гварды read/write),
+`ESP32-DIV.ino` (`neoPixelInit`/`neoPixelSetEnabled` в setup), `SettingsStore.*` (`neopixelEnabled`),
+`utils.cpp` (пункт меню). Библиотека: **Adafruit NeoPixel** (+ Adafruit BusIO).
+
 ---
 
 ## Влитый PR #179 (RadDad87: bugfixes-and-features) + наши правки к нему
@@ -119,10 +156,11 @@ Flash 16 МБ. Дисплей — bundled `TFT_eSPI` + `User_Setup v2.h`.
 | `subghz.cpp` | ручная частота + ускорение, единый ввод Replay/Jammer, фикс «Mode:», согласование кнопок |
 | `bluetooth.cpp`,`wifi.cpp`,`gps.cpp`,`rfid.cpp` | PR #179 + перевод release‑wait на `isButtonHeld`; PN532‑проба |
 | `hardware_detect.h` | новый модуль (PR #179), задействован на boot |
+| `neopixel.h/.cpp` | новый модуль: 4 WS2812 на IO1, индикация nRF24/CC1101/RFID |
 
 ## Сборка и прошивка
 
 - **Плата:** ESP32-S3 Dev Module, core esp32 2.0.10, PartitionScheme=min_spiffs, Flash 16MB.
-- **Библиотеки:** bundled TFT_eSPI (User_Setup v2) + SmartRC-CC1101; NimBLE-Arduino 1.4.3, PCF8574 (Mischianti), RF24, IRremoteESP8266, arduinoFFT 1.6.2, ArduinoJson 6, rc-switch, XPT2046_Touchscreen, Adafruit PN532.
+- **Библиотеки:** bundled TFT_eSPI (User_Setup v2) + SmartRC-CC1101; NimBLE-Arduino 1.4.3, PCF8574 (Mischianti), RF24, IRremoteESP8266, arduinoFFT 1.6.2, ArduinoJson 6, rc-switch, XPT2046_Touchscreen, Adafruit PN532, **Adafruit NeoPixel** (+ Adafruit BusIO).
 - **Линковка:** нужен `-zmuldefs` (оверрайд `ieee80211_raw_frame_sanity_check` и общий символ `spi` между TFT_eSPI и CC1101).
 - **Прошивка:** merged‑bin на offset `0x0` (USB), либо app‑bin как `firmware.bin` через меню Update Firmware → SD Card (без USB).

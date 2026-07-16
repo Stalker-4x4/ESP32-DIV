@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "icon.h"
+#include "neopixel.h"
 #include "shared.h"
 #include "utils.h"
 
@@ -1265,14 +1266,17 @@ void initializeRadiosMultiMode() {
   if (radio1.begin()) {
     configureRadio(radio1, channelGroup1, sizeof(channelGroup1));
     radio1Active = true;
+    neoPixelSetNrf24(0, RfLedState::Tx);  // configureRadio() starts a constant carrier immediately
   }
   if (radio2.begin()) {
     configureRadio(radio2, channelGroup2, sizeof(channelGroup2));
     radio2Active = true;
+    neoPixelSetNrf24(1, RfLedState::Tx);
   }
   if (radio3.begin()) {
     configureRadio(radio3, channelGroup3, sizeof(channelGroup3));
     radio3Active = true;
+    neoPixelSetNrf24(2, RfLedState::Tx);
   }
 }
 
@@ -1284,6 +1288,9 @@ void initializeRadios() {
     radio1.powerDown();
     radio2.powerDown();
     radio3.powerDown();
+    neoPixelSetNrf24(0, RfLedState::Off);
+    neoPixelSetNrf24(1, RfLedState::Off);
+    neoPixelSetNrf24(2, RfLedState::Off);
   }
 }
 
@@ -2415,7 +2422,15 @@ void runUI() {
   }
 }
 
+// Scanner reuses nRF24 module #1's SPI/CS wiring in RPD (carrier-detect) mode —
+// turns the LED green for the duration of the sweep, off on every exit path.
+struct NrfScannerLedGuard {
+  NrfScannerLedGuard()  { neoPixelSetNrf24(0, RfLedState::Rx); }
+  ~NrfScannerLedGuard() { neoPixelSetNrf24(0, RfLedState::Off); }
+};
+
 void scanChannels() {
+  NrfScannerLedGuard ledGuard;
   disable();
   static uint32_t lastUI = 0;
   for (int j = 0; j < (int)SCAN_SWEEPS && scanning; j++) {
@@ -3130,14 +3145,17 @@ void initializeRadiosMultiMode() {
   if (radio1.begin()) {
     configureRadio(radio1, channelGroup1, sizeof(channelGroup1));
     radio1Active = true;
+    neoPixelSetNrf24(0, RfLedState::Tx);  // configureRadio() starts a constant carrier immediately
   }
   if (radio2.begin()) {
     configureRadio(radio2, channelGroup2, sizeof(channelGroup2));
     radio2Active = true;
+    neoPixelSetNrf24(1, RfLedState::Tx);
   }
   if (radio3.begin()) {
     configureRadio(radio3, channelGroup3, sizeof(channelGroup3));
     radio3Active = true;
+    neoPixelSetNrf24(2, RfLedState::Tx);
   }
 }
 
@@ -3149,6 +3167,9 @@ void initializeRadios() {
     radio1.powerDown();
     radio2.powerDown();
     radio3.powerDown();
+    neoPixelSetNrf24(0, RfLedState::Off);
+    neoPixelSetNrf24(1, RfLedState::Off);
+    neoPixelSetNrf24(2, RfLedState::Off);
   }
 }
 

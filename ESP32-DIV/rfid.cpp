@@ -9,6 +9,7 @@
 #include "SettingsStore.h"
 #include "Touchscreen.h"
 #include "icon.h"
+#include "neopixel.h"
 #include "utils.h"
 #include "shared.h"
 
@@ -1649,9 +1650,23 @@ static bool rfidTargetWaitReader(const char* tickMsg, unsigned long timeoutMs, u
   }
 }
 
+// Shared by every session type (dump/decode/clone/card-reader/...) to poll for
+// a tag. Lights the LED blue on entry, off on whichever return path fires.
+struct RfidReadLedGuard {
+  RfidReadLedGuard()  { neoPixelSetRfid(RfidLedState::Read); }
+  ~RfidReadLedGuard() { neoPixelSetRfid(RfidLedState::Off); }
+};
+// Wrap an actual block-write attempt (or a run of them) so the LED goes
+// orange for exactly that span, then back off on any exit path.
+struct RfidWriteLedGuard {
+  RfidWriteLedGuard()  { neoPixelSetRfid(RfidLedState::Write); }
+  ~RfidWriteLedGuard() { neoPixelSetRfid(RfidLedState::Off); }
+};
+
 static bool rfidListenIso14443a(const char* title, const char* footer, uint8_t* uid,
                                 uint8_t* uidLenOut, unsigned long timeoutMs, const char* tickMsg,
                                 const char* infoBody = nullptr) {
+  RfidReadLedGuard ledGuard;
   const char* info = (infoBody && infoBody[0]) ? infoBody : tickMsg;
   for (;;) {
     unsigned long t0 = millis();
@@ -1719,10 +1734,13 @@ void sessionErase() {
     rfidResultAndDismiss("Erase", "Auth failed", "Could not authenticate block 4 with key A.");
     return;
   }
-  if (!s_nfc.mifareclassic_WriteDataBlock(4, emptyBlock)) {
-    rfidRestoreBus();
-    rfidResultAndDismiss("Erase", "Write failed", "Block 4 write was rejected.");
-    return;
+  {
+    RfidWriteLedGuard ledGuard;
+    if (!s_nfc.mifareclassic_WriteDataBlock(4, emptyBlock)) {
+      rfidRestoreBus();
+      rfidResultAndDismiss("Erase", "Write failed", "Block 4 write was rejected.");
+      return;
+    }
   }
 
   rfidRestoreBus();
@@ -2388,6 +2406,7 @@ void sessionClone() {
   bool gen2MagicDetected = false;
 #endif
 
+  RfidWriteLedGuard ledGuard;  // covers every write below, whichever blank-tag type it is
   if (blankType == MIFARE_CLASSIC) {
     bool magic = tryMagicBackdoor();
 #if RFID_UID_CLONE

@@ -4,8 +4,18 @@
 #include "Touchscreen.h"
 #include "config.h"
 #include "icon.h"
+#include "neopixel.h"
 #include "shared.h"
 #include "SettingsStore.h"
+
+// CC1101 status LED (pixel #4, shared with the RFID/NFC reader — the two
+// features are never active at the same time). Every real RX/TX/idle
+// transition in this file goes through ELECHOUSE_cc1101.SetRx()/SetTx()/
+// setSidle(), so wrapping those three calls keeps the LED accurate without
+// having to track state at each of the ~20 call sites individually.
+static inline void cc1101GoRx()   { ELECHOUSE_cc1101.SetRx();    neoPixelSetCc1101(RfLedState::Rx); }
+static inline void cc1101GoTx()   { ELECHOUSE_cc1101.SetTx();    neoPixelSetCc1101(RfLedState::Tx); }
+static inline void cc1101GoIdle() { ELECHOUSE_cc1101.setSidle(); neoPixelSetCc1101(RfLedState::Off); }
 
 // SubGHz manual fine-tuning (settings().subghzManualFreq): Freq+/- step by 0.01 MHz
 // instead of cycling the fixed preset list. Shared by Replay Attack and Jammer.
@@ -728,9 +738,9 @@ static uint32_t replayDecodeMinDwellMs() {
 
 static void tuneToIndex(uint16_t idx, bool persist = true) {
   currentFrequencyIndex = idx % freqCount();
-  ELECHOUSE_cc1101.setSidle();
+  cc1101GoIdle();
   ELECHOUSE_cc1101.setMHZ(subghz_frequency_list[currentFrequencyIndex] / 1000000.0);
-  ELECHOUSE_cc1101.SetRx();
+  cc1101GoRx();
   if (persist) {
     EEPROM.put(ADDR_FREQ, currentFrequencyIndex);
     EEPROM.commit();
@@ -745,9 +755,9 @@ static void replayClearScanLock() {
 
 // Manual fine-tuning: tune the CC1101 straight to replayManualMHz (no preset list).
 static void replayTuneManual() {
-  ELECHOUSE_cc1101.setSidle();
+  cc1101GoIdle();
   ELECHOUSE_cc1101.setMHZ(replayManualMHz);
-  ELECHOUSE_cc1101.SetRx();
+  cc1101GoRx();
   mySwitch.setReceiveTolerance(replayManualMHz < 350.0 ? 50 : 40);
 }
 
@@ -1055,9 +1065,9 @@ void updateDisplay() {
     s_replayDisp.valid = true;
 
     if (!autoScanEnabled) {
-      ELECHOUSE_cc1101.setSidle();
+      cc1101GoIdle();
       ELECHOUSE_cc1101.setMHZ(subghz_frequency_list[currentFrequencyIndex] / 1000000.0);
-      ELECHOUSE_cc1101.SetRx();
+      cc1101GoRx();
     }
 }
 
@@ -1095,7 +1105,7 @@ void sendSignal() {
     mySwitch.disableReceive();
     delay(100);
     mySwitch.enableTransmit(REPLAY_TX_PIN);
-    ELECHOUSE_cc1101.SetTx();
+    cc1101GoTx();
 
     tft.fillRect(0, 40, 240, kReplayStatusLineY - 40, TFT_BLACK);
 
@@ -1112,7 +1122,7 @@ void sendSignal() {
     tft.setCursor(10, 30 + yshift);
     tft.print("Done!");
 
-    ELECHOUSE_cc1101.SetRx();
+    cc1101GoRx();
     mySwitch.disableTransmit();
     delay(100);
     mySwitch.enableReceive(REPLAY_RX_PIN);
@@ -1420,7 +1430,7 @@ void ReplayAttackSetup() {
 
   ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
 
-  ELECHOUSE_cc1101.SetRx();
+  cc1101GoRx();
 
   mySwitch.enableReceive(REPLAY_RX_PIN);
   mySwitch.enableTransmit(REPLAY_TX_PIN);
@@ -2091,13 +2101,13 @@ void transmitProfile(int index) {
     if (!selectedValid) return;
     Profile profileToSend = selectedProfile;
 
-    ELECHOUSE_cc1101.setSidle();
+    cc1101GoIdle();
     ELECHOUSE_cc1101.setMHZ(profileToSend.frequency / 1000000.0);
 
     mySwitch.disableReceive();
     delay(100);
     mySwitch.enableTransmit(SUBGHZ_TX_PIN);
-    ELECHOUSE_cc1101.SetTx();
+    cc1101GoTx();
 
     profileClearContentArea(TFT_BLACK);
     tft.setCursor(10, 30 + yshift);
@@ -2117,7 +2127,7 @@ void transmitProfile(int index) {
     tft.setCursor(10, 30 + yshift);
     tft.print("Done!");
 
-    ELECHOUSE_cc1101.SetRx();
+    cc1101GoRx();
     mySwitch.disableTransmit();
     delay(100);
     mySwitch.enableReceive(SUBGHZ_RX_PIN);
@@ -2327,7 +2337,7 @@ void saveSetup() {
 
     ELECHOUSE_cc1101.Init();
     ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
-    ELECHOUSE_cc1101.SetRx();
+    cc1101GoRx();
 
     mySwitch.enableReceive(SUBGHZ_RX_PIN);
     mySwitch.enableTransmit(SUBGHZ_TX_PIN);
@@ -2457,10 +2467,10 @@ static void subjammerToggleJam() {
   if (jammingRunning) {
     Serial.println("Jamming started");
     ELECHOUSE_cc1101.setMHZ(targetFrequency);
-    ELECHOUSE_cc1101.SetTx();
+    cc1101GoTx();
   } else {
     Serial.println("Jamming stopped");
-    ELECHOUSE_cc1101.setSidle();
+    cc1101GoIdle();
     digitalWrite(TX_PIN, LOW);
   }
   updateDisplay();
@@ -2473,7 +2483,7 @@ static void subjammerFreqAdjust(double deltaMHz) {
   if (targetFrequency > (float)SUBGHZ_MANUAL_MAX_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MAX_MHZ;
   if (targetFrequency < (float)SUBGHZ_MANUAL_MIN_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MIN_MHZ;
   ELECHOUSE_cc1101.setMHZ(targetFrequency);
-  if (jammingRunning) ELECHOUSE_cc1101.SetTx();
+  if (jammingRunning) cc1101GoTx();
   updateDisplay();
 }
 
@@ -2482,7 +2492,7 @@ static void subjammerFreqNext() {
     targetFrequency += (float)SUBGHZ_MANUAL_STEP_MHZ;
     if (targetFrequency > (float)SUBGHZ_MANUAL_MAX_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MAX_MHZ;
     ELECHOUSE_cc1101.setMHZ(targetFrequency);
-    if (jammingRunning) ELECHOUSE_cc1101.SetTx();
+    if (jammingRunning) cc1101GoTx();
     updateDisplay();
     lastDebounceTime = millis();
     return;
@@ -2502,7 +2512,7 @@ static void subjammerFreqPrev() {
     targetFrequency -= (float)SUBGHZ_MANUAL_STEP_MHZ;
     if (targetFrequency < (float)SUBGHZ_MANUAL_MIN_MHZ) targetFrequency = (float)SUBGHZ_MANUAL_MIN_MHZ;
     ELECHOUSE_cc1101.setMHZ(targetFrequency);
-    if (jammingRunning) ELECHOUSE_cc1101.SetTx();
+    if (jammingRunning) cc1101GoTx();
     updateDisplay();
     lastDebounceTime = millis();
     return;
@@ -2520,9 +2530,9 @@ static void subjammerFreqPrev() {
 static void subjammerApplyFrequency() {
   ELECHOUSE_cc1101.setMHZ(targetFrequency);
   if (jammingRunning) {
-    ELECHOUSE_cc1101.SetTx();
+    cc1101GoTx();
   } else {
-    ELECHOUSE_cc1101.setSidle();
+    cc1101GoIdle();
     digitalWrite(TX_PIN, LOW);
   }
 }
@@ -2754,10 +2764,10 @@ void runUI() {
                     if (jammingRunning) {
                         Serial.println("Jamming started");
                         ELECHOUSE_cc1101.setMHZ(targetFrequency);
-                        ELECHOUSE_cc1101.SetTx();
+                        cc1101GoTx();
                     } else {
                         Serial.println("Jamming stopped");
-                        ELECHOUSE_cc1101.setSidle();
+                        cc1101GoIdle();
                         digitalWrite(TX_PIN, LOW);
                     }
                     updateDisplay();
@@ -2860,7 +2870,7 @@ void subjammerSetup() {
     ELECHOUSE_cc1101.setRxBW(500.0);
     ELECHOUSE_cc1101.setPA(12);
     ELECHOUSE_cc1101.setMHZ(targetFrequency);
-    ELECHOUSE_cc1101.SetTx();
+    cc1101GoTx();
 
     randomSeed(analogRead(0));
 
@@ -2934,7 +2944,7 @@ void subjammerLoop() {
     subjammerAutoSweepIfDue();
 
     if (jammingRunning) {
-        ELECHOUSE_cc1101.SetTx();
+        cc1101GoTx();
 
         if (continuousMode) {
             ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, 0xFF);
