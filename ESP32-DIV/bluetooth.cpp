@@ -1285,6 +1285,12 @@ void initializeRadiosMultiMode() {
 void initializeRadios() {
   if (jammerActive) {
     initializeRadiosMultiMode();
+    // Light one pixel per nRF24 module while jamming. Driven by jammer state
+    // (not radio.begin()), so the indicator is reliable regardless of whether
+    // the RF24 auto-detect probe succeeds on this shared SPI bus.
+    neoPixelSetNrf24(0, RfLedState::Tx);
+    neoPixelSetNrf24(1, RfLedState::Tx);
+    neoPixelSetNrf24(2, RfLedState::Tx);
 
   } else {
     radio1.powerDown();
@@ -1380,13 +1386,6 @@ void blejamSetup() {
   drawStatusBar(currentBatteryVoltage, true);
   redrawTouchButtonBar();
 
-  // nRF24 shares SPI with the SD card on a different pin mapping; reconfigure it
-  // for the radio wiring so radio.begin() and the status LEDs actually come up.
-  SPI.begin(13, 11, 12, 4);
-  SPI.setDataMode(SPI_MODE0);
-  SPI.setFrequency(10000000);
-  SPI.setBitOrder(MSBFIRST);
-
   initializeRadios();
   setupTouchscreen();
   updateTFT();
@@ -1434,7 +1433,6 @@ void exit() {
 
   jammerActive = false;
   initializeRadios();          // powers down radios + clears the nRF24 LEDs
-  restoreSdAfterSharedSpi();   // hand SPI back to the SD card
 }
 }
 
@@ -3173,6 +3171,12 @@ void initializeRadiosMultiMode() {
 void initializeRadios() {
   if (jammerActive) {
     initializeRadiosMultiMode();
+    // Light one pixel per nRF24 module while jamming. Driven by jammer state
+    // (not radio.begin()), so the indicator is reliable regardless of whether
+    // the RF24 auto-detect probe succeeds on this shared SPI bus.
+    neoPixelSetNrf24(0, RfLedState::Tx);
+    neoPixelSetNrf24(1, RfLedState::Tx);
+    neoPixelSetNrf24(2, RfLedState::Tx);
 
   } else {
     radio1.powerDown();
@@ -3286,16 +3290,6 @@ void prokillSetup() {
 
   updateTFT();
 
-  // The nRF24 radios share SPI with the SD card but on a different pin mapping
-  // (SCK=13, MISO=11, MOSI=12, CS=4). On entry SPI is still wired for the SD
-  // card, so radio.begin() would fail and neither the carrier nor the status
-  // LEDs would come up. Reconfigure SPI for the nRF24 wiring first (same as the
-  // 2.4GHz Scanner does).
-  SPI.begin(13, 11, 12, 4);
-  SPI.setDataMode(SPI_MODE0);
-  SPI.setFrequency(10000000);
-  SPI.setBitOrder(MSBFIRST);
-
   initializeRadios();
 
 #if HAS_PCF8574_BUTTONS
@@ -3310,18 +3304,12 @@ void prokillSetup() {
   redrawTouchButtonBar();
 }
 
-// Power down the radios, clear the status LEDs and hand SPI back to the SD card
-// when leaving Proto Kill. Without this the constant carrier keeps transmitting
-// and pixels 0-2 stay red after the menu closes.
+// Stop jamming, power down the radios and clear pixels 0-2 when leaving Proto
+// Kill. Without this the constant carrier keeps transmitting and the pixels
+// stay red after the menu closes.
 void prokillExit() {
   jammerActive = false;
-  radio1.powerDown();
-  radio2.powerDown();
-  radio3.powerDown();
-  neoPixelSetNrf24(0, RfLedState::Off);
-  neoPixelSetNrf24(1, RfLedState::Off);
-  neoPixelSetNrf24(2, RfLedState::Off);
-  restoreSdAfterSharedSpi();
+  initializeRadios();  // powers down radios + clears the nRF24 pixels
 }
 
 void prokillLoop() {
