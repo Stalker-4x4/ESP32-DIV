@@ -3396,11 +3396,19 @@ void setup() {
     for (uint8_t a = 0x20; a <= 0x27; a++) {
       if (probePCF8574(a)) { hwStatus.pcf8574_present = true; break; }
     }
-    // SPI: switch to the shield RF wiring, probe nRF24 + CC1101, then hand SPI back to SD.
-    SPI.begin(13, 11, 12, CSN_PIN_1);
+    // SPI: nRF24 / CC1101 / SD all share SCK=12, MISO=13, MOSI=11 (only CS differs).
+    // SPIClass::begin() no-ops if the bus is already up, so end() first to force a
+    // clean init on the correct pins — otherwise probeNRF24()/probeCC1101() run on a
+    // stale/mismatched bus and report the modules as absent. CS is software-driven.
+    SPI.end();
+    SPI.begin(12, 13, 11, -1);
+    SPI.setDataMode(SPI_MODE0);
+    SPI.setFrequency(4000000);
+    SPI.setBitOrder(MSBFIRST);
     hwStatus.nrf24_present  = probeNRF24();
     hwStatus.cc1101_present = probeCC1101();
-    initSDCard();                 // restores SD SPI wiring and remounts the card
+    SPI.end();
+    initSDCard();                 // re-init the bus for SD and remount the card
     hwStatus.sd_present = sdCardPresent;
     // UART: listen briefly for NMEA on the GPS port (module TX -> IO47)
     {

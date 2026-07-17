@@ -2975,7 +2975,10 @@ void scannerSetup() {
   Print("[+] Scanner ready", UI_WARN, false);
   redrawTouchButtonBar();
 
-  SPI.begin(13, 11, 12, 4);
+  // nRF24 bus: SCK=12, MISO=13, MOSI=11 (shared with SD/CC1101; CS software-driven).
+  // end() first so begin() actually applies the pins (begin() no-ops on an open bus).
+  SPI.end();
+  SPI.begin(12, 13, 11, -1);
   SPI.setDataMode(SPI_MODE0);
   SPI.setFrequency(10000000);
   SPI.setBitOrder(MSBFIRST);
