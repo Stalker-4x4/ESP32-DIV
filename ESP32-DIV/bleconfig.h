@@ -51,6 +51,7 @@ namespace Scanner {
 namespace ProtoKill {
   void prokillLoop();
   void prokillSetup();
+  void prokillExit();
 }
 
 namespace BleSniffer {

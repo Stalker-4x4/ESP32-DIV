@@ -4,7 +4,7 @@
 Сборка: Arduino-CLI, core `esp32 @ 2.0.10`, раздел `Minimal SPIFFS (min_spiffs)`,
 Flash 16 МБ. Дисплей — bundled `TFT_eSPI` + `User_Setup v2.h`.
 
-Версия прошивки на экране увеличивается при каждой перепрошивке: `v1.7.0-1` … текущая **`v1.7.0-9`**
+Версия прошивки на экране увеличивается при каждой перепрошивке: `v1.7.0-1` … текущая **`v1.7.0-10`**
 (`ESP32DIV_VERSION` в `shared.h`).
 
 ---
@@ -157,6 +157,47 @@ MCU — только по получении новых данных). `neoPixel
 
 > Тот же класс проблемы (LED/TX не гаснут при выходе) вероятно есть и в SubGHz → Jammer —
 > не входило в этот запрос, зафиксировано отдельной задачей.
+
+---
+
+## 11. NeoPixel — доработки индикации и выход из RF-меню (v1.7.0-10)
+
+**SubGHz Jammer — тот же баг выхода, что и в Replay Attack.** `subjammerSetup()` уходил в TX
+(`cc1101GoTx()`, LED красный) сразу при входе, и при выходе из меню CC1101 оставался в TX
+(реальный шум) с горящим LED. Добавлена `subjammer::subjammerExit()` (сброс `jammingRunning`,
+`cc1101GoIdle()`, `TX_PIN` LOW), вызывается в обоих местах диспетчера; на входе теперь idle —
+TX/красный только после явного включения джамминга.
+
+**2.4GHz → Proto Kill — светодиоды не работали.** nRF24 делит SPI с SD-картой, но на другой
+раскладке пинов (SCK=13, MISO=11, MOSI=12, CS=4). На входе SPI оставался настроен под SD, поэтому
+`radio.begin()` падал — не поднимались ни несущая, ни LED. Добавлена инициализация SPI под nRF24
+(как в 2.4GHz Scanner) в `prokillSetup()`; плюс `prokillExit()` — powerDown радио, гашение
+пикселей 0-2 и возврат SPI под SD.
+
+**Аналогичный баг в BLE Jammer (тоже nRF24).** `BleJammer::exit()` существовал, но **не вызывался**
+диспетчером, и SPI под nRF24 не инициализировался. Добавлена инициализация SPI в `blejamSetup()`,
+в `exit()` добавлен возврат SPI под SD, и `BleJammer::exit()` теперь вызывается в обоих местах
+диспетчера.
+
+**WiFi/Bluetooth активность на пикселе 0.** Новый `neoPixelSetHostRadio()`: пиксель 0 светится
+**оранжевым при работе с WiFi** и **голубым при работе с Bluetooth/BLE** (радио самого ESP32).
+Задействован в Setup всех WiFi-фич (Packet Monitor, Beacon Spammer, Deauther, Probe Flood, Deauth
+Detector, WiFi Scanner, Captive Portal) и BLE-фич на радио ESP32 (Spoofer, Sour Apple, Sniffer,
+BLE Scanner, Rubber Ducky); гасится централизованно в `displayMenu()`/`displaySubmenu()`.
+Примечание: BLE Jammer и Proto Kill используют nRF24, а не радио ESP32 — у них пиксели 0-2 остаются
+в схеме nRF24 (зелёный приём / красный передача).
+
+**RFID/NFC — LED не горел при чтении/записи по блокам.** Гварды `RfidReadLedGuard`/`RfidWriteLedGuard`
+раньше охватывали только фазу поиска метки (UID) — сам блочный обмен шёл с погашенным LED. Гварды
+добавлены на реальные операции: `sessionDump` (чтение блоков/страниц), `sessionCardReader`
+(сэмпл блока 0 / страниц 4-7), `sessionDecodeAccess` (чтение блока 7), `sessionClone` (чтение
+источника поблочно), `sessionTagDisrupt` (запись трейлеров). Теперь синий горит на всём чтении,
+оранжевый — на всей записи.
+
+Файлы: `neopixel.h/.cpp` (`neoPixelSetHostRadio`, `HostRadioLed`), `subghz.cpp` (`subjammerExit`),
+`bluetooth.cpp` (Proto Kill / BLE Jammer SPI+exit, BLE-фичи host-radio), `wifi.cpp` (WiFi-фичи
+host-radio), `rfid.cpp` (гварды на блочный обмен), `ESP32-DIV.ino` (вызовы exit в диспетчере,
+Rubber Ducky, гашение в меню), `config.h`/`subconfig.h`/`bleconfig.h` (декларации).
 
 ---
 

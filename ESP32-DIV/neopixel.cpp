@@ -76,3 +76,13 @@ void neoPixelSetRfid(RfidLedState state) {
   }
   setPixel(NEOPIXEL_CC1101_RFID_IDX, c);
 }
+
+void neoPixelSetHostRadio(HostRadioLed state) {
+  uint32_t c = 0;
+  switch (state) {
+    case HostRadioLed::Wifi:      c = s_strip.Color(255, 140, 0); break;  // orange
+    case HostRadioLed::Bluetooth: c = s_strip.Color(0, 160, 255); break;  // sky blue
+    default: break;
+  }
+  setPixel(0, c);  // pixel 0 is shared with nRF24 #1; only one radio family runs at a time
+}

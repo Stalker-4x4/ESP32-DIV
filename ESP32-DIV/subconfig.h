@@ -32,6 +32,7 @@ namespace SavedProfile {
 namespace subjammer {
   void subjammerSetup();
   void subjammerLoop();
+  void subjammerExit();
 }
 
 #endif

@@ -664,6 +664,7 @@ static void runBleDuckyFeature() {
   in_sub_menu = true;
   feature_active = true;
   feature_exit_requested = false;
+  neoPixelSetHostRadio(HostRadioLed::Bluetooth);
   Ducky::enter();
   while (current_submenu_index == 5 && !feature_exit_requested) {
       current_submenu_index = 5;
@@ -672,6 +673,7 @@ static void runBleDuckyFeature() {
   }
 
   Ducky::exit();
+  neoPixelSetHostRadio(HostRadioLed::Off);
   if (feature_exit_requested) {
       in_sub_menu = true;
       is_main_menu = false;
@@ -709,6 +711,8 @@ void displayOtherMenuGrid();
 
 void displaySubmenu() {
     setTouchButtonInputEnabled(false);
+    // Back at a menu → no WiFi/BLE feature is running; clear the host-radio light.
+    neoPixelSetHostRadio(HostRadioLed::Off);
 
     if (current_menu_index == 2 && other_layer == OTHER_LAYER_HOME) {
         displayOtherMenuGrid();
@@ -867,6 +871,8 @@ static void drawMainMenuOtherTripleIcons(int x_position, int y_position, uint16_
 void displayMenu() {
 
   setTouchButtonInputEnabled(false);
+  // Main menu → clear the WiFi/BLE host-radio light (pixel 0).
+  neoPixelSetHostRadio(HostRadioLed::Off);
   applyThemeToPalette(settings().theme);
 
 const uint16_t icon_colors[NUM_MENU_ITEMS] = {
@@ -1534,6 +1540,7 @@ void handleBluetoothSubmenuButtons() {
                     break;
                 }
             }
+            BleJammer::exit();
             if (feature_exit_requested) {
                 in_sub_menu = true;
                 is_main_menu = false;
@@ -1738,6 +1745,7 @@ void handleBluetoothSubmenuButtons() {
                             break;
                         }
                     }
+                    BleJammer::exit();
                     if (feature_exit_requested) {
                         in_sub_menu = true;
                         is_main_menu = false;
@@ -1973,6 +1981,7 @@ void handleNRFSubmenuButtons() {
                     break;
                 }
             }
+            ProtoKill::prokillExit();
             if (feature_exit_requested) {
                 in_sub_menu = true;
                 is_main_menu = false;
@@ -2064,6 +2073,7 @@ void handleNRFSubmenuButtons() {
                             break;
                         }
                     }
+                    ProtoKill::prokillExit();
                     if (feature_exit_requested) {
                         in_sub_menu = true;
                         is_main_menu = false;
@@ -2172,6 +2182,7 @@ void handleSubGHzSubmenuButtons() {
                     break;
                 }
             }
+            subjammer::subjammerExit();
             if (feature_exit_requested) {
                 in_sub_menu = true;
                 is_main_menu = false;
@@ -2333,6 +2344,7 @@ void handleSubGHzSubmenuButtons() {
                             break;
                         }
                     }
+                    subjammer::subjammerExit();
                     if (feature_exit_requested) {
                         in_sub_menu = true;
                         is_main_menu = false;

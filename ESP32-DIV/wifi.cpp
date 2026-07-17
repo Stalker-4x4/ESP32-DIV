@@ -9,6 +9,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "icon.h"
+#include "neopixel.h"
 #include "shared.h"
 #include "utils.h"
 
@@ -725,6 +726,7 @@ static void ptmDrawWaitCard() {
 }
 
 void ptmSetup() {
+  neoPixelSetHostRadio(HostRadioLed::Wifi);
   pauseBackgroundRadioTasks();
   setTouchButtonInputEnabled(true);
   setTouchNavLabels("Ch-", nullptr, "Exit", nullptr, "Ch+");
@@ -1343,6 +1345,7 @@ void runUI() {
 }
 
 void beaconSpamSetup() {
+  neoPixelSetHostRadio(HostRadioLed::Wifi);
   pauseBackgroundRadioTasks();
   setTouchButtonInputEnabled(true);
   spam = false;
@@ -1855,6 +1858,7 @@ void runUI() {
 }
 
 void deauthdetectSetup() {
+  neoPixelSetHostRadio(HostRadioLed::Wifi);
   pauseBackgroundRadioTasks();
   setTouchButtonInputEnabled(true);
   setTouchNavLabels(nullptr, nullptr, "Exit", "Pause", nullptr);
@@ -2589,6 +2593,7 @@ void runUI() {
 }
 
 void wifiscanSetup() {
+  neoPixelSetHostRadio(HostRadioLed::Wifi);
   pauseBackgroundRadioTasks();
   setTouchButtonInputEnabled(true);
   wifiScanUpdateNavLabels();
@@ -4120,6 +4125,7 @@ static void cportalHandleCredNavButtons() {
 }
 
 void cportalSetup() {
+  neoPixelSetHostRadio(HostRadioLed::Wifi);
   pauseBackgroundRadioTasks();
   setTouchButtonInputEnabled(true);
   cportalUpdateNavLabels();
@@ -4721,6 +4727,7 @@ void runUI() {
 }
 
 void deautherSetup() {
+    neoPixelSetHostRadio(HostRadioLed::Wifi);
     pauseBackgroundRadioTasks();
     setTouchButtonInputEnabled(true);
     deautherUpdateNavLabels(false);
@@ -5403,6 +5410,7 @@ void runUI() {
 }
 
 void probeRequestFloodSetup() {
+    neoPixelSetHostRadio(HostRadioLed::Wifi);
     pauseBackgroundRadioTasks();
     setTouchButtonInputEnabled(true);
     probeUpdateNavLabels(false);

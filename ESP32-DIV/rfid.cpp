@@ -1778,6 +1778,8 @@ void sessionDump() {
   int blocksRead = 0;
   int segmentsExpected = 0;
 
+  {
+    RfidReadLedGuard ledGuard;  // blue LED stays on for the whole block-by-block read
   if (ct == MIFARE_CLASSIC) {
     segmentsExpected = 64;
     rfidTransitionToProgress("Dump", "Reading Classic blocks", "Cancel",
@@ -1870,6 +1872,7 @@ void sessionDump() {
                          "Dump targets Classic or Ultralight/NTAG.\nTag did not match.");
     return;
   }
+  }  // end RfidReadLedGuard scope (LED off before the result dialog)
 
   const bool tagGoneAtEnd = segmentsExpected > 0 && blocksRead > 0 && blocksRead < segmentsExpected &&
                             !rfidTagStillPresent(uid, uidLength);
@@ -1936,6 +1939,8 @@ void sessionDecodeAccess() {
   uint8_t blk[16] = {0};
   bool authenticated = false;
   (void)tryMagicBackdoor();
+  {
+    RfidReadLedGuard ledGuard;  // blue LED while authenticating + reading block 7
   if (s_nfc.mifareclassic_AuthenticateBlock(uid, uidLength, 7, 0, keyA)) {
     authenticated = true;
   } else if (s_nfc.mifareclassic_AuthenticateBlock(uid, uidLength, 7, 1, keyB)) {
@@ -1947,6 +1952,7 @@ void sessionDecodeAccess() {
     rfidResultAndDismiss("Decode Access", "Failed", "Could not read block 7 (sector 1 trailer).");
     return;
   }
+  }  // end RfidReadLedGuard scope
 
   uint8_t a6 = blk[6], a7 = blk[7], a8 = blk[8];
   uint8_t c1 = (uint8_t)((a7 >> 5) & 0x01);
@@ -2162,6 +2168,7 @@ void sessionCardReader() {
   if (ct == MIFARE_CLASSIC) {
     uint8_t keyA[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     uint8_t data[16];
+    RfidReadLedGuard ledGuard;  // blue LED while sampling block 0
     if (s_nfc.mifareclassic_AuthenticateBlock(uid, uidLength, 0, 0, keyA) &&
         s_nfc.mifareclassic_ReadDataBlock(0, data)) {
       formatClassicBlock0(classicBlk, sizeof(classicBlk), data);
@@ -2174,6 +2181,7 @@ void sessionCardReader() {
   char ulSample[240] = "";
   if (ct == MIFARE_ULTRALIGHT || ct == NTAG) {
     uint8_t pg[4][4];
+    RfidReadLedGuard ledGuard;  // blue LED while sampling pages 4-7
     bool ok = true;
     for (int pi = 0; pi < 4; pi++) {
       if (!s_nfc.mifareultralight_ReadPage((uint8_t)(4 + pi), pg[pi])) {
@@ -2289,6 +2297,8 @@ void sessionClone() {
   memset(s_srcPages, 0, sizeof(s_srcPages));
   bool readOk = true;
 
+  {
+    RfidReadLedGuard ledGuard;  // blue LED while reading the source tag block-by-block
   if (srcType == MIFARE_CLASSIC) {
     rfidTransitionToProgress("Clone", "Step 2/4 — Read source", "Cancel",
                              "Reading source Classic data blocks 0–47.");
@@ -2348,6 +2358,7 @@ void sessionClone() {
       delay(12);
     }
   }
+  }  // end RfidReadLedGuard scope (source read done)
 
   rfidRestoreBus();
 
@@ -2590,6 +2601,8 @@ void sessionTagDisrupt() {
   rfidTransitionToProgress("Tag Disrupt", "Writing sector trailers", "Cancel",
                            "Rotating trailer write patterns.\n16 sector trailers targeted.");
   rfidSetDynamicPill("WRITE", UI_WARN);
+  {
+    RfidWriteLedGuard ledGuard;  // orange LED while writing sector trailers block-by-block
   for (uint8_t i = 0; i < 16; i++) {
     uint8_t block = sectorTrailers[i];
     char l2[48];
@@ -2628,6 +2641,7 @@ void sessionTagDisrupt() {
     }
     delay(35);
   }
+  }  // end RfidWriteLedGuard scope
 
   rfidRestoreBus();
 

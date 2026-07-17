@@ -77,6 +77,7 @@ namespace Scanner {
 namespace ProtoKill {
   void prokillSetup();
   void prokillLoop();
+  void prokillExit();
 }
 namespace BleSniffer {
   void blesnifferSetup();
@@ -97,6 +98,7 @@ namespace SavedProfile {
 namespace subjammer {
   void subjammerSetup();
   void subjammerLoop();
+  void subjammerExit();
 }
 
 /* ───────────── WiFi namespaces ───────────── */

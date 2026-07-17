@@ -2880,7 +2880,9 @@ void subjammerSetup() {
     ELECHOUSE_cc1101.setRxBW(500.0);
     ELECHOUSE_cc1101.setPA(12);
     ELECHOUSE_cc1101.setMHZ(targetFrequency);
-    cc1101GoTx();
+    // Idle on entry (LED off) — jamming/TX starts only when the user toggles it on.
+    jammingRunning = false;
+    cc1101GoIdle();
 
     randomSeed(analogRead(0));
 
@@ -2972,4 +2974,14 @@ void subjammerLoop() {
           }
       }
   }
+// end subjammerLoop; namespace subjammer stays open for subjammerExit below
+
+// Stop jamming and idle the radio when leaving the Jammer. Without this, if the
+// user leaves the menu with jamming still on, CC1101 stays in TX (real RF noise)
+// and the NeoPixel (red = Tx) never turns off.
+void subjammerExit() {
+  jammingRunning = false;
+  cc1101GoIdle();
+  digitalWrite(TX_PIN, LOW);
 }
+} // namespace subjammer
