@@ -21,6 +21,7 @@ extern PCF8574 pcf;
 namespace replayat {
   void ReplayAttackSetup();
   void ReplayAttackLoop();
+  void ReplayAttackExit();
 }
 
 namespace SavedProfile {

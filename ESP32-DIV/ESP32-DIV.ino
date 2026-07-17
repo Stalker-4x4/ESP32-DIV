@@ -2137,6 +2137,7 @@ void handleSubGHzSubmenuButtons() {
                     break;
                 }
             }
+            replayat::ReplayAttackExit();
             if (feature_exit_requested) {
                 in_sub_menu = true;
                 is_main_menu = false;
@@ -2267,6 +2268,7 @@ void handleSubGHzSubmenuButtons() {
                             break;
                         }
                     }
+                    replayat::ReplayAttackExit();
                     if (feature_exit_requested) {
                         in_sub_menu = true;
                         is_main_menu = false;
@@ -3336,6 +3338,11 @@ void setup() {
 
   i2cGuardInit();   // create the I2C mutex before any task touches the bus
 
+  // Clear the WS2812 chain immediately: on a soft reset the LEDs otherwise
+  // hold whatever color they last showed until this runs, since nothing
+  // re-drives GPIO1 before this point in boot.
+  neoPixelInit();
+
   tft.init();
   tft.setRotation(TFT_ROTATION);
 
@@ -3359,7 +3366,6 @@ void setup() {
   applyThemeToPalette(settings().theme);
   setBrightness(settings().brightness);
 
-  neoPixelInit();
   neoPixelSetEnabled(settings().neopixelEnabled);
 
 #if HAS_PCF8574_BUTTONS

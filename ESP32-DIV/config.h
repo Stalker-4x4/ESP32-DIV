@@ -88,6 +88,7 @@ namespace BleSniffer {
 namespace replayat {
   void ReplayAttackSetup();
   void ReplayAttackLoop();
+  void ReplayAttackExit();
 }
 namespace SavedProfile {
   void saveSetup();

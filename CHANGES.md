@@ -4,7 +4,7 @@
 Сборка: Arduino-CLI, core `esp32 @ 2.0.10`, раздел `Minimal SPIFFS (min_spiffs)`,
 Flash 16 МБ. Дисплей — bundled `TFT_eSPI` + `User_Setup v2.h`.
 
-Версия прошивки на экране увеличивается при каждой перепрошивке: `v1.7.0-1` … текущая **`v1.7.0-8`**
+Версия прошивки на экране увеличивается при каждой перепрошивке: `v1.7.0-1` … текущая **`v1.7.0-9`**
 (`ESP32DIV_VERSION` в `shared.h`).
 
 ---
@@ -127,6 +127,36 @@ Flash 16 МБ. Дисплей — bundled `TFT_eSPI` + `User_Setup v2.h`.
 `subghz.cpp` (обёртки CC1101), `bluetooth.cpp` (nRF24 RX/TX), `rfid.cpp` (гварды read/write),
 `ESP32-DIV.ino` (`neoPixelInit`/`neoPixelSetEnabled` в setup), `SettingsStore.*` (`neopixelEnabled`),
 `utils.cpp` (пункт меню). Библиотека: **Adafruit NeoPixel** (+ Adafruit BusIO).
+
+---
+
+## 10. Replay Attack — LED/приём не гасли при выходе из меню; NeoPixel гарантированно гаснут при загрузке (v1.7.0-9)
+
+**Проблема 1:** при выходе из SubGHz → Replay Attack зелёный светодиод CC1101 (пиксель 3) оставался
+гореть, и приём фактически продолжался в фоне.
+
+**Причина:** `ReplayAttackSetup()` включает `cc1101GoRx()` + `mySwitch.enableReceive(REPLAY_RX_PIN)`
+(прерывание на GDO0), но ни в одном из двух мест диспетчера (`ESP32-DIV.ino`, вызовы
+`replayat::ReplayAttackSetup/Loop()`) не было функции очистки при выходе — CC1101 оставался в RX,
+а обработчик прерывания продолжал висеть на пине.
+
+**Решение:** добавлена `replayat::ReplayAttackExit()` (`subghz.cpp`) — `mySwitch.disableReceive()` +
+`cc1101GoIdle()` (переводит CC1101 в idle и гасит NeoPixel). Вызывается в обоих местах диспетчера
+сразу после выхода из цикла, независимо от пути выхода (кнопка Back или `feature_exit_requested`).
+
+**Проблема 2:** требование — при перезагрузке устройства все NeoPixel должны гарантированно гаснуть.
+
+**Решение:** `neoPixelInit()` (аппаратный `clear()+show()`) перенесён в самое начало `setup()`
+(сразу после `i2cGuardInit()`, до `tft.init()`/лого/SD), чтобы минимизировать окно, в течение
+которого WS2812 держат цвет с прошлого включения (сама лента не сбрасывается при простом ресете
+MCU — только по получении новых данных). `neoPixelSetEnabled(settings().neopixelEnabled)`
+по‑прежнему вызывается позже, после `settingsLoad()`.
+
+Файлы: `subghz.cpp` (`ReplayAttackExit`), `config.h`/`subconfig.h` (декларация), `ESP32-DIV.ino`
+(оба вызова диспетчера + порядок вызовов в `setup()`).
+
+> Тот же класс проблемы (LED/TX не гаснут при выходе) вероятно есть и в SubGHz → Jammer —
+> не входило в этот запрос, зафиксировано отдельной задачей.
 
 ---
 

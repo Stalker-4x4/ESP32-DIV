@@ -1678,7 +1678,17 @@ void ReplayAttackLoop() {
     }
 
   }
+// end ReplayAttackLoop (namespace closes below, after ReplayAttackExit)
+
+// Stop passive RX and idle the radio when leaving Replay Attack. Without this,
+// mySwitch stays attached to the GDO0 interrupt and CC1101 stays in RX after
+// the menu is closed, and the NeoPixel (green = Rx) never turns off.
+void ReplayAttackExit() {
+  mySwitch.disableReceive();
+  cc1101GoIdle();
 }
+
+} // namespace replayat
 
 namespace SavedProfile {
 
