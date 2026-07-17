@@ -3405,7 +3405,13 @@ void setup() {
     SPI.setDataMode(SPI_MODE0);
     SPI.setFrequency(4000000);
     SPI.setBitOrder(MSBFIRST);
-    hwStatus.nrf24_present  = probeNRF24();
+    {
+      bool nrf[3] = {false, false, false};
+      hwStatus.nrf24_present = probeAllNRF24(nrf);  // deselects all CSN, then probes each
+      hwStatus.nrf24_1 = nrf[0];
+      hwStatus.nrf24_2 = nrf[1];
+      hwStatus.nrf24_3 = nrf[2];
+    }
     hwStatus.cc1101_present = probeCC1101();
     SPI.end();
     initSDCard();                 // re-init the bus for SD and remount the card

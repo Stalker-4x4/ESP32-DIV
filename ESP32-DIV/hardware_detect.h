@@ -9,7 +9,10 @@
 #include "shared.h"
 
 struct HardwareStatus {
-  bool nrf24_present   = false;
+  bool nrf24_present   = false;   // true if ANY of the three modules answered
+  bool nrf24_1         = false;   // module #1 (CE15/CSN4)
+  bool nrf24_2         = false;   // module #2 (CE47/CSN48)
+  bool nrf24_3         = false;   // module #3 (CE14/CSN21)
   bool cc1101_present  = false;
   bool gps_present     = false;
   bool ir_present      = false;
@@ -20,41 +23,59 @@ struct HardwareStatus {
 
 extern HardwareStatus hwStatus;
 
-// Presence test: write a scratch value to the RF_CH register (0x05) and read it
-// back. A bare STATUS read is unreliable (returns 0x00/0xFF on a floating MISO,
-// which can also happen transiently on a present chip). RF_CH is a plain 7-bit
-// R/W register with no side effects, so a matching read-back means the module
-// is really answering on SPI. Wrapped in an explicit transaction so the mode/
-// clock are correct regardless of what the bus was left on. CE stays low.
-inline bool probeNRF24() {
-  const uint8_t RF_CH = 0x05;      // register address
-  const uint8_t W_REGISTER = 0x20; // command base for writes
+// Presence test for one nRF24 on the shared bus: write a scratch value to RF_CH
+// (0x05) and read it back. RF_CH is a plain 7-bit R/W register with no side
+// effects, so a matching read-back means the module really answers on SPI.
+// (A bare STATUS read is unreliable — a floating MISO reads 0x00/0xFF.)
+// IMPORTANT: the three modules share MISO, so every CSN must be HIGH except the
+// one being probed — otherwise an un-driven CSN leaves its module on the bus and
+// corrupts the read. Call nrf24DeselectAll() once before probing each module.
+inline bool probeNRF24Csn(uint8_t csnPin) {
+  const uint8_t RF_CH = 0x05;
+  const uint8_t W_REGISTER = 0x20;
   const uint8_t testVal = 0x2A;    // arbitrary valid channel (42)
 
-  pinMode(CSN_PIN_1, OUTPUT);
-  digitalWrite(CSN_PIN_1, HIGH);
-#ifdef CE_PIN_1
-  pinMode(CE_PIN_1, OUTPUT);
-  digitalWrite(CE_PIN_1, LOW);
-#endif
-
   SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
-  // write RF_CH = testVal
-  digitalWrite(CSN_PIN_1, LOW);
+  digitalWrite(csnPin, LOW);
   SPI.transfer(W_REGISTER | RF_CH);
   SPI.transfer(testVal);
-  digitalWrite(CSN_PIN_1, HIGH);
-  // read RF_CH back
-  digitalWrite(CSN_PIN_1, LOW);
+  digitalWrite(csnPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(csnPin, LOW);
   SPI.transfer(RF_CH);
   uint8_t readBack = SPI.transfer(0xFF);
-  digitalWrite(CSN_PIN_1, HIGH);
+  digitalWrite(csnPin, HIGH);
   SPI.endTransaction();
 
-  bool present = (readBack == testVal);
-  Serial.printf("[HW] NRF24 probe: RF_CH read-back=0x%02X -> %s\n", readBack,
-                present ? "FOUND" : "NOT FOUND");
-  return present;
+  return (readBack == testVal);
+}
+
+// Drive every nRF24 CE low (standby) and every CSN high (deselected) so the
+// shared MISO line is clean before probing individual modules.
+inline void nrf24DeselectAll() {
+  const uint8_t csn[3] = {CSN_PIN_1, CSN_PIN_2, CSN_PIN_3};
+  const uint8_t ce[3]  = {CE_PIN_1, CE_PIN_2, CE_PIN_3};
+  for (int i = 0; i < 3; i++) {
+    pinMode(ce[i], OUTPUT);
+    digitalWrite(ce[i], LOW);
+    pinMode(csn[i], OUTPUT);
+    digitalWrite(csn[i], HIGH);
+  }
+  delay(6);  // let the modules settle in standby after power-on / bus quiets
+}
+
+// Probe all three modules; fills present[0..2] and returns true if any answered.
+inline bool probeAllNRF24(bool present[3]) {
+  const uint8_t csn[3] = {CSN_PIN_1, CSN_PIN_2, CSN_PIN_3};
+  nrf24DeselectAll();
+  bool any = false;
+  for (int i = 0; i < 3; i++) {
+    present[i] = probeNRF24Csn(csn[i]);
+    any = any || present[i];
+    Serial.printf("[HW] NRF24 #%d (CSN=%u): %s\n", i + 1, (unsigned)csn[i],
+                  present[i] ? "FOUND" : "NOT FOUND");
+  }
+  return any;
 }
 
 inline bool probeCC1101() {
@@ -97,12 +118,14 @@ inline void showHardwareStatus(TFT_eSPI& tft, int startY = 200) {
   tft.setTextFont(1);
   struct ModuleInfo { const char* name; bool present; };
   ModuleInfo modules[] = {
-    { "NRF24",   hwStatus.nrf24_present },
-    { "CC1101",  hwStatus.cc1101_present },
-    { "GPS",     hwStatus.gps_present },
-    { "PN532",   hwStatus.pn532_present },
-    { "PCF8574", hwStatus.pcf8574_present },
-    { "SD Card", hwStatus.sd_present },
+    { "nRF24 #1", hwStatus.nrf24_1 },
+    { "nRF24 #2", hwStatus.nrf24_2 },
+    { "nRF24 #3", hwStatus.nrf24_3 },
+    { "CC1101",   hwStatus.cc1101_present },
+    { "GPS",      hwStatus.gps_present },
+    { "PN532",    hwStatus.pn532_present },
+    { "PCF8574",  hwStatus.pcf8574_present },
+    { "SD Card",  hwStatus.sd_present },
   };
   int y = startY;
   tft.setTextColor(TFT_DARKGREY);
