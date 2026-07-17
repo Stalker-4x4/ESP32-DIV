@@ -3425,6 +3425,13 @@ void setup() {
     }
     // PN532 over SPI (RfidNfc::begin probes firmware version and restores SD SPI).
     hwStatus.pn532_present = RfidNfc::begin();
+    // The shared-SPI probes above (nRF24 / CC1101 / PN532) leave the bus on
+    // non-SD pins, and initSDCard() only configures SPI — it never calls
+    // SD.begin(). Force the bus back to the SD pins and actually mount the card
+    // here so it is ready immediately after boot (previously it only mounted
+    // lazily on the first feature that called isSDCardAvailable()).
+    SPI.end();
+    hwStatus.sd_present = isSDCardAvailable();
     Serial.printf("[HW] summary: nrf24=%d cc1101=%d gps=%d pn532=%d pcf8574=%d sd=%d\n",
                   hwStatus.nrf24_present, hwStatus.cc1101_present, hwStatus.gps_present,
                   hwStatus.pn532_present, hwStatus.pcf8574_present, hwStatus.sd_present);

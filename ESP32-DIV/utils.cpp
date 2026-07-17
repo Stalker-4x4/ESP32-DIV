@@ -2217,47 +2217,49 @@ static void openSelected();
 static bool deleteSelected(String* errOut);
 
 static void sdFmHandleNavButtons() {
-  // isButtonPressedEdge fires once per press for BOTH the on-screen touch nav bar
-  // AND the physical PCF8574 buttons, so navigation works with either input.
+  // isButtonPressed is a debounced single-shot for BOTH the on-screen touch nav
+  // bar AND the physical PCF8574 buttons: one action per press, re-arming only
+  // after the button is released for ≥70 ms (these buttons bounce while pressed,
+  // so a raw edge fired several moves per tap).
   if (page == Page::Browser) {
-    if (isButtonPressedEdge(BTN_LEFT)) {
+    if (isButtonPressed(BTN_LEFT)) {
       feature_exit_requested = true;
       return;
     }
-    if (isButtonPressedEdge(BTN_UP) && !entries.empty()) {
+    if (isButtonPressed(BTN_UP) && !entries.empty()) {
       sel--;
       clampSel();
       drawBrowserPage(false);
       return;
     }
-    if (isButtonPressedEdge(BTN_DOWN) && !entries.empty()) {
+    if (isButtonPressed(BTN_DOWN) && !entries.empty()) {
       sel++;
       clampSel();
       drawBrowserPage(false);
       return;
     }
-    if (isButtonPressedEdge(BTN_RIGHT)) {
+    if (isButtonPressed(BTN_RIGHT)) {
       openSelected();
       return;
     }
-    if (isButtonPressedEdge(BTN_SELECT)) {
+    if (isButtonPressed(BTN_SELECT)) {
       reloadDir(cwd, nullptr);
       drawBrowserPage(true);
     }
   } else if (page == Page::Info) {
-    if (isButtonPressedEdge(BTN_LEFT)) {
+    if (isButtonPressed(BTN_LEFT)) {
       drawBrowserPage();
       return;
     }
-    if (isButtonPressedEdge(BTN_SELECT)) {
+    if (isButtonPressed(BTN_SELECT)) {
       drawConfirmDeletePage();
     }
   } else if (page == Page::ConfirmDelete) {
-    if (isButtonPressedEdge(BTN_LEFT)) {
+    if (isButtonPressed(BTN_LEFT)) {
       drawBrowserPage();
       return;
     }
-    if (isButtonPressedEdge(BTN_SELECT)) {
+    if (isButtonPressed(BTN_SELECT)) {
       String err;
       const bool ok = deleteSelected(&err);
       if (!ok) {
