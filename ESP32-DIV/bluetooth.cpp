@@ -1386,6 +1386,10 @@ void blejamSetup() {
   drawStatusBar(currentBatteryVoltage, true);
   redrawTouchButtonBar();
 
+  // Switch the shared SPI bus to the nRF24 pin mapping (see prokillSetup note).
+  SPI.end();
+  SPI.begin(13, 11, 12, 4);
+
   initializeRadios();
   setupTouchscreen();
   updateTFT();
@@ -1433,6 +1437,8 @@ void exit() {
 
   jammerActive = false;
   initializeRadios();          // powers down radios + clears the nRF24 LEDs
+  SPI.end();
+  restoreSdAfterSharedSpi();   // hand the SPI bus back to the SD card
 }
 }
 
@@ -3290,6 +3296,14 @@ void prokillSetup() {
 
   updateTFT();
 
+  // nRF24 shares the global SPI bus with the SD card, but on a different pin
+  // mapping (SCK=13, MISO=11, MOSI=12, CS=4). SPIClass::begin() no-ops if the
+  // bus is already up, so we must end() first to actually switch the pins —
+  // otherwise radio.begin() talks on the SD pins, no carrier goes out and the
+  // LEDs never light. RF24's own SPI.begin() then no-ops and keeps these pins.
+  SPI.end();
+  SPI.begin(13, 11, 12, 4);
+
   initializeRadios();
 
 #if HAS_PCF8574_BUTTONS
@@ -3304,12 +3318,14 @@ void prokillSetup() {
   redrawTouchButtonBar();
 }
 
-// Stop jamming, power down the radios and clear pixels 0-2 when leaving Proto
-// Kill. Without this the constant carrier keeps transmitting and the pixels
-// stay red after the menu closes.
+// Stop jamming, power down the radios, clear pixels 0-2 and hand the SPI bus
+// back to the SD card when leaving Proto Kill. Without this the constant
+// carrier keeps transmitting, the pixels stay red, and SD access breaks.
 void prokillExit() {
   jammerActive = false;
   initializeRadios();  // powers down radios + clears the nRF24 pixels
+  SPI.end();
+  restoreSdAfterSharedSpi();  // re-begin the bus on the SD pins + remount
 }
 
 void prokillLoop() {
