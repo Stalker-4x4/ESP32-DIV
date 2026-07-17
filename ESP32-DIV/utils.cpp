@@ -2217,48 +2217,47 @@ static void openSelected();
 static bool deleteSelected(String* errOut);
 
 static void sdFmHandleNavButtons() {
-  if (!featureHasTouchNavBar()) {
-    return;
-  }
+  // isButtonPressedEdge fires once per press for BOTH the on-screen touch nav bar
+  // AND the physical PCF8574 buttons, so navigation works with either input.
   if (page == Page::Browser) {
-    if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+    if (isButtonPressedEdge(BTN_LEFT)) {
       feature_exit_requested = true;
       return;
     }
-    if (isTouchNavButtonPressedEdge(BTN_UP) && !entries.empty()) {
+    if (isButtonPressedEdge(BTN_UP) && !entries.empty()) {
       sel--;
       clampSel();
       drawBrowserPage(false);
       return;
     }
-    if (isTouchNavButtonPressedEdge(BTN_DOWN) && !entries.empty()) {
+    if (isButtonPressedEdge(BTN_DOWN) && !entries.empty()) {
       sel++;
       clampSel();
       drawBrowserPage(false);
       return;
     }
-    if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    if (isButtonPressedEdge(BTN_RIGHT)) {
       openSelected();
       return;
     }
-    if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    if (isButtonPressedEdge(BTN_SELECT)) {
       reloadDir(cwd, nullptr);
       drawBrowserPage(true);
     }
   } else if (page == Page::Info) {
-    if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+    if (isButtonPressedEdge(BTN_LEFT)) {
       drawBrowserPage();
       return;
     }
-    if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    if (isButtonPressedEdge(BTN_SELECT)) {
       drawConfirmDeletePage();
     }
   } else if (page == Page::ConfirmDelete) {
-    if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+    if (isButtonPressedEdge(BTN_LEFT)) {
       drawBrowserPage();
       return;
     }
-    if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    if (isButtonPressedEdge(BTN_SELECT)) {
       String err;
       const bool ok = deleteSelected(&err);
       if (!ok) {
@@ -2907,17 +2906,9 @@ void loop() {
     }
   }
 
-  // Physical navigation (kept for devices without touch nav bar).
-  if (!featureHasTouchNavBar() && isButtonPressed(BTN_UP)) {
-    if (page == Page::Browser && !entries.empty()) { sel--; clampSel(); drawBrowserPage(false); }
-    delay(160);
-    return;
-  }
-  if (!featureHasTouchNavBar() && isButtonPressed(BTN_DOWN)) {
-    if (page == Page::Browser && !entries.empty()) { sel++; clampSel(); drawBrowserPage(false); }
-    delay(160);
-    return;
-  }
+  // (Physical UP/DOWN/LEFT/RIGHT/SELECT are handled in sdFmHandleNavButtons()
+  //  via isButtonPressedEdge, which covers both physical buttons and the touch
+  //  nav bar — no separate no-touch-bar fallback needed here.)
 
   int x, y;
   bool touched = readTouchXY(x, y);
