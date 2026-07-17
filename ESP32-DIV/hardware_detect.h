@@ -20,13 +20,40 @@ struct HardwareStatus {
 
 extern HardwareStatus hwStatus;
 
+// Presence test: write a scratch value to the RF_CH register (0x05) and read it
+// back. A bare STATUS read is unreliable (returns 0x00/0xFF on a floating MISO,
+// which can also happen transiently on a present chip). RF_CH is a plain 7-bit
+// R/W register with no side effects, so a matching read-back means the module
+// is really answering on SPI. Wrapped in an explicit transaction so the mode/
+// clock are correct regardless of what the bus was left on. CE stays low.
 inline bool probeNRF24() {
+  const uint8_t RF_CH = 0x05;      // register address
+  const uint8_t W_REGISTER = 0x20; // command base for writes
+  const uint8_t testVal = 0x2A;    // arbitrary valid channel (42)
+
   pinMode(CSN_PIN_1, OUTPUT);
-  digitalWrite(CSN_PIN_1, LOW);
-  uint8_t status = SPI.transfer(0xFF);
   digitalWrite(CSN_PIN_1, HIGH);
-  bool present = (status != 0x00 && status != 0xFF);
-  Serial.printf("[HW] NRF24 probe: STATUS=0x%02X -> %s\n", status, present ? "FOUND" : "NOT FOUND");
+#ifdef CE_PIN_1
+  pinMode(CE_PIN_1, OUTPUT);
+  digitalWrite(CE_PIN_1, LOW);
+#endif
+
+  SPI.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE0));
+  // write RF_CH = testVal
+  digitalWrite(CSN_PIN_1, LOW);
+  SPI.transfer(W_REGISTER | RF_CH);
+  SPI.transfer(testVal);
+  digitalWrite(CSN_PIN_1, HIGH);
+  // read RF_CH back
+  digitalWrite(CSN_PIN_1, LOW);
+  SPI.transfer(RF_CH);
+  uint8_t readBack = SPI.transfer(0xFF);
+  digitalWrite(CSN_PIN_1, HIGH);
+  SPI.endTransaction();
+
+  bool present = (readBack == testVal);
+  Serial.printf("[HW] NRF24 probe: RF_CH read-back=0x%02X -> %s\n", readBack,
+                present ? "FOUND" : "NOT FOUND");
   return present;
 }
 

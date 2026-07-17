@@ -7,7 +7,11 @@
 #define NEOPIXEL_PIN 1
 #endif
 #define NEOPIXEL_COUNT 4
-#define NEOPIXEL_CC1101_RFID_IDX 3
+// Physical WS2812 chain order (as wired): pixel 0 = CC1101/RFID, pixels 1/2/3 =
+// nRF24 #1/#2/#3. (The chain was reordered vs the original layout so the CC1101/
+// RFID LED is first and the three nRF24 LEDs follow.)
+#define NEOPIXEL_CC1101_RFID_IDX 0
+#define NEOPIXEL_NRF24_BASE_IDX  1   // nRF24 module i lives at pixel (BASE + i)
 
 static Adafruit_NeoPixel s_strip(NEOPIXEL_COUNT, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 static bool s_inited = false;
@@ -54,7 +58,7 @@ void neoPixelSetNrf24(uint8_t moduleIndex, RfLedState state) {
     case RfLedState::Tx: c = s_strip.Color(255, 0, 0); break;
     default: break;
   }
-  setPixel(moduleIndex, c);
+  setPixel(NEOPIXEL_NRF24_BASE_IDX + moduleIndex, c);
 }
 
 void neoPixelSetCc1101(RfLedState state) {
@@ -84,5 +88,6 @@ void neoPixelSetHostRadio(HostRadioLed state) {
     case HostRadioLed::Bluetooth: c = s_strip.Color(0, 160, 255); break;  // sky blue
     default: break;
   }
-  setPixel(0, c);  // pixel 0 is shared with nRF24 #1; only one radio family runs at a time
+  // Shares nRF24 #1's pixel (host WiFi/BLE radio vs nRF24 never run at once).
+  setPixel(NEOPIXEL_NRF24_BASE_IDX, c);
 }
