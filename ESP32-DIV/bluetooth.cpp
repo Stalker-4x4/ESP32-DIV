@@ -1265,17 +1265,21 @@ void initializeRadiosMultiMode() {
   bool radio2Active = false;
   bool radio3Active = false;
 
-  if (radio1.begin()) {
+  // begin(&SPI) reuses the bus we just configured (SCK=12/MISO=13/MOSI=11)
+  // without re-running SPI.begin() (which would reset the pins). The LED for
+  // each module lights only if its begin() succeeds — i.e. SPI actually talks
+  // to that module.
+  if (radio1.begin(&SPI)) {
     configureRadio(radio1, channelGroup1, sizeof(channelGroup1));
     radio1Active = true;
     neoPixelSetNrf24(0, RfLedState::Tx);  // configureRadio() starts a constant carrier immediately
   }
-  if (radio2.begin()) {
+  if (radio2.begin(&SPI)) {
     configureRadio(radio2, channelGroup2, sizeof(channelGroup2));
     radio2Active = true;
     neoPixelSetNrf24(1, RfLedState::Tx);
   }
-  if (radio3.begin()) {
+  if (radio3.begin(&SPI)) {
     configureRadio(radio3, channelGroup3, sizeof(channelGroup3));
     radio3Active = true;
     neoPixelSetNrf24(2, RfLedState::Tx);
@@ -1284,13 +1288,7 @@ void initializeRadiosMultiMode() {
 
 void initializeRadios() {
   if (jammerActive) {
-    initializeRadiosMultiMode();
-    // Light one pixel per nRF24 module while jamming. Driven by jammer state
-    // (not radio.begin()), so the indicator is reliable regardless of whether
-    // the RF24 auto-detect probe succeeds on this shared SPI bus.
-    neoPixelSetNrf24(0, RfLedState::Tx);
-    neoPixelSetNrf24(1, RfLedState::Tx);
-    neoPixelSetNrf24(2, RfLedState::Tx);
+    initializeRadiosMultiMode();  // lights pixel i only if radio_i.begin() succeeds (SPI OK)
 
   } else {
     radio1.powerDown();
@@ -1386,9 +1384,10 @@ void blejamSetup() {
   drawStatusBar(currentBatteryVoltage, true);
   redrawTouchButtonBar();
 
-  // Switch the shared SPI bus to the nRF24 pin mapping (see prokillSetup note).
+  // Put the shared SPI bus on the nRF24 pins (SCK=12, MISO=13, MOSI=11 — same as
+  // SD; see prokillSetup note). end() first so begin() actually applies them.
   SPI.end();
-  SPI.begin(13, 11, 12, 4);
+  SPI.begin(12, 13, 11, -1);
 
   initializeRadios();
   setupTouchscreen();
@@ -3157,17 +3156,21 @@ void initializeRadiosMultiMode() {
   bool radio2Active = false;
   bool radio3Active = false;
 
-  if (radio1.begin()) {
+  // begin(&SPI) reuses the bus we just configured (SCK=12/MISO=13/MOSI=11)
+  // without re-running SPI.begin() (which would reset the pins). The LED for
+  // each module lights only if its begin() succeeds — i.e. SPI actually talks
+  // to that module.
+  if (radio1.begin(&SPI)) {
     configureRadio(radio1, channelGroup1, sizeof(channelGroup1));
     radio1Active = true;
     neoPixelSetNrf24(0, RfLedState::Tx);  // configureRadio() starts a constant carrier immediately
   }
-  if (radio2.begin()) {
+  if (radio2.begin(&SPI)) {
     configureRadio(radio2, channelGroup2, sizeof(channelGroup2));
     radio2Active = true;
     neoPixelSetNrf24(1, RfLedState::Tx);
   }
-  if (radio3.begin()) {
+  if (radio3.begin(&SPI)) {
     configureRadio(radio3, channelGroup3, sizeof(channelGroup3));
     radio3Active = true;
     neoPixelSetNrf24(2, RfLedState::Tx);
@@ -3176,13 +3179,7 @@ void initializeRadiosMultiMode() {
 
 void initializeRadios() {
   if (jammerActive) {
-    initializeRadiosMultiMode();
-    // Light one pixel per nRF24 module while jamming. Driven by jammer state
-    // (not radio.begin()), so the indicator is reliable regardless of whether
-    // the RF24 auto-detect probe succeeds on this shared SPI bus.
-    neoPixelSetNrf24(0, RfLedState::Tx);
-    neoPixelSetNrf24(1, RfLedState::Tx);
-    neoPixelSetNrf24(2, RfLedState::Tx);
+    initializeRadiosMultiMode();  // lights pixel i only if radio_i.begin() succeeds (SPI OK)
 
   } else {
     radio1.powerDown();
@@ -3296,13 +3293,14 @@ void prokillSetup() {
 
   updateTFT();
 
-  // nRF24 shares the global SPI bus with the SD card, but on a different pin
-  // mapping (SCK=13, MISO=11, MOSI=12, CS=4). SPIClass::begin() no-ops if the
-  // bus is already up, so we must end() first to actually switch the pins —
-  // otherwise radio.begin() talks on the SD pins, no carrier goes out and the
-  // LEDs never light. RF24's own SPI.begin() then no-ops and keeps these pins.
+  // nRF24 modules share the global SPI bus (SCK=12, MISO=13, MOSI=11 — the same
+  // pins as the SD card; only CE/CSN differ per module). SPIClass::begin() no-ops
+  // if the bus is already up, so end() first to guarantee the bus is on these
+  // exact pins regardless of what a previous feature (e.g. PN532) left it on;
+  // otherwise radio.begin() fails and no carrier goes out. RF24's own SPI.begin()
+  // then no-ops and keeps these pins. CS is software-driven per module (ss=-1).
   SPI.end();
-  SPI.begin(13, 11, 12, 4);
+  SPI.begin(12, 13, 11, -1);
 
   initializeRadios();
 
